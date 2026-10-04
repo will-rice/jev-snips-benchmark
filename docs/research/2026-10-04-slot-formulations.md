@@ -411,11 +411,10 @@ errors:
 - Say what one word must be, since the question is about one word: "A word
   of the title of an album", not "The title of the album".
 - Name typical words, and the words that look similar but do not count:
-  `music_item` is "song, track, album ... Not the general words music,
-  songs, tunes".
-- State SNIPS's boundary conventions: "The word playlist or list that
-  follows the name is not part of it"; "In this current book only current
-  counts".
+  `music_item` under `PlayMusic` lists the generic words that count and
+  then the general words that do not (music, songs, tunes).
+- State SNIPS's boundary conventions: "The word playlist that follows the
+  name is not part of it."; which word of "this current book" counts.
 
 Slot F1 and share of utterances with every word right, on each intent's 200
 search utterances:
@@ -505,14 +504,15 @@ search (1,400) and check (700) utterances:
 
 ### Span formulations as benchmark conditions, added and removed
 
-Formulations 12 and 26 had been run with throwaway scripts. For a day they
+Formulations 12 and 26 had been run with throwaway scripts. Briefly they
 were conditions of the benchmark, named `extraction` and `function_calling`
 and described as the Jev docs' patterns. They were removed: the benchmark's
 method is token classification, and the description was wrong. As noted
-under 12 and 26, the docs' cookbooks pick among candidates found by pattern
-or among fixed lists; offering every span of words is our substitution. The
-code and its saved runs are in the repository's history at commit
-`bdad347`. Each slot had a one-sentence definition from the first set of
+under 12 and 26, the docs' cookbooks pick among candidates that code
+supplies (found by pattern, taken from a fixed list or roster, or proposed
+by a named-entity recognizer or an LLM); offering every span of words is
+our substitution. The code and its saved runs are in the repository's
+history at commit `bdad347`. Each slot had a one-sentence definition from the first set of
 definitions and the question pair written for formulation 26.
 
 In the table, "pick or none" is formulation 12's shape and "stated" is
@@ -558,7 +558,7 @@ test runs:
   care.
 - Saved probabilities leave out options scored 0.00, a change made when a
   span question's 255 options made a run's file about 10 MB. It was kept
-  after the span conditions were removed; the saved runs are in that form.
+  after the span conditions were removed; runs are written in that form.
 
 ### A full read of the Jev docs
 
@@ -734,11 +734,12 @@ word that points to the work without naming it, or the kind of work."}`
   one-sentence definitions, token classification beat them on test by 4
   and 7 points of slot F1 at about 60% of the tokens; with its current
   definitions it is 14 and 17 points ahead.
-- **The docs have no recipe for open-text slots.** Their extraction
-  cookbooks pick among candidates that code finds by pattern, or among
-  fixed lists of values. Neither exists for a song title. The span
-  formulations were our attempt to fill that gap and were wrongly labelled
-  as the docs' patterns for a time.
+- **The docs' extraction recipe needs a candidate finder.** Their
+  cookbooks pick among candidates that code supplies: found by pattern,
+  taken from a fixed list or roster, or proposed by a named-entity
+  recognizer or an LLM. A song title has no pattern or list, and no second
+  model was used here. The span formulations offered every span instead,
+  and were wrongly labelled as the docs' patterns for a time.
 - **A `stated` gate trades false proposals for misses** and loses overall
   (row 26).
 - **Two formulations together beat either alone** (row 27), at 2.7 times the
@@ -754,8 +755,9 @@ word that points to the work without naming it, or the kind of work."}`
 - Span-level definitions for the span formulations written and revised
   with the care the per-word definitions got.
 - The value-extraction cookbook as written: a code-side finder for the
-  slots that have a pattern (numbers, times), with Jev picking among what
-  it finds.
+  slots that have a pattern (numbers, times), or candidates proposed by a
+  named-entity recognizer or an LLM for names and titles, with Jev picking
+  among what it finds.
 - The intent options' slot definitions held once in the state. The intent
   request has one question, so it would not save tokens.
 - A beam over the top two or three intents, keeping the intent whose slot

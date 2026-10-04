@@ -39,12 +39,12 @@ Input tokens per run, mean of three runs:
 | Retrieved    | 2,658,401 | 2,645,952 |
 
 Jev's answers are not identical between runs, which is why each condition is
-run three times. The ranges are at most 1.3 points.
+run three times. The ranges are under one point.
 
 ### What the numbers say
 
 - **Intent detection needs almost nothing.** Names alone give 94.3%.
-  Definitions add 1.3 points, and retrieved examples 1.3 more.
+  Definitions add 1.3 points, and retrieved examples 1.2 more.
 - **An intent is best defined by its slots.** Each intent's option says what
   the intent is and lists its slots' definitions. With one sentence per
   intent and no slots, descriptions scored 95.1 and retrieved 96.2; with
@@ -270,20 +270,22 @@ a time expression into a structured value.
 ## Checked against the Jev docs
 
 We read all of the Jev documentation against this implementation. Where the
-docs give guidance, the benchmark follows it, with two deliberate exceptions.
+docs give guidance, the benchmark follows it, with one deliberate exception.
 
 - **Followed:** one narrow judgment per question; labelled fields instead of
   string templates; backticked references to the parts of the state a
   question should use; a no-match option with its own definition; reference
-  material in the state; in the best condition, only relevant context in
+  material and examples in the state; in the best condition, only relevant context in
   the state (8 retrieved examples, where few-shot shows 32 fixed ones); a
   pinned model version (`jev-1.13.0`, not the `jev-latest`
   alias); all of a word-level request's questions in one call.
-- **No recipe in the docs fits open-text slots.** The docs extract a value
-  by having Jev pick among candidates that code found by pattern, or among
-  a fixed list of values. A song title or a restaurant name has neither.
-  One question per word, with the slot types as the options, is this
-  benchmark's own formulation, not one taken from the docs.
+- **Not taken from the docs: one question per word.** The docs extract a
+  value by having Jev pick among candidates that code supplies: found by a
+  regular expression, taken from a fixed list or a roster, or proposed by a
+  named-entity recognizer or an LLM. A song title has no pattern or list,
+  and this benchmark uses no second model to propose candidates. Asking
+  about each word, with the slot types as the options, needs no candidates.
+  It is this benchmark's own formulation.
 - **Tested and found not to matter:** the docs warn that Jev leans toward
   the first option and say to reorder and check. Reversing or shuffling the
   slot options changes about 1% of answers and no score.
@@ -293,9 +295,6 @@ docs give guidance, the benchmark follows it, with two deliberate exceptions.
   all depend on the predicted intent, which is the case the docs allow a
   second request for. A single-request version would ask the slot questions
   for all seven intents at roughly seven times the slot tokens.
-- **Exception, examples in the state.** The docs show examples inside option
-  descriptions or instruction fields. Whole labelled utterances in the state
-  are billed once per request and scored higher here.
 
 ## What we tried
 
@@ -409,8 +408,9 @@ What we learned, beyond the findings at the top:
 - A yes/no about each adjacent pair of words ("part of the same name or
   title?") is too unreliable to rebuild spans from.
 - Moving definitions into the state only helps when examples are there too.
-  Without examples it saves 38% of the tokens but loses frame accuracy, so
-  the descriptions condition keeps them on the options.
+  Without examples it saves 62% of the tokens but costs a point of slot F1
+  and four of frame accuracy on the dev set, so the descriptions condition
+  keeps them on the options.
 - With examples, descriptions add about half a point; without examples they
   add 17.
 - The remaining errors are mostly small words inside names ("the", "of")
@@ -454,9 +454,56 @@ uv run run names --limit 20
 
 A limited run writes to its own files and leaves the full results in place.
 
+## Reproducing the results
+
+The predictions are not in the repository; `results/` is git-ignored. With
+a TypeSafe API key in `.env`, these five commands regenerate every number
+in the Results section:
+
+```bash
+uv run run names
+```
+
+```bash
+uv run run descriptions
+```
+
+```bash
+uv run run fewshot
+```
+
+```bash
+uv run run retrieved
+```
+
+```bash
+uv run report
+```
+
+- Each `run` evaluates the 700 test utterances three times, saves the
+  predictions, and logs the three metrics and the input tokens, each as a
+  mean and range over the runs. `report` reads the saved runs and adds the
+  figures for utterances with the intent right in every condition and the
+  slot F1 of each slot type.
+- One pass over all four conditions is about 21.8M input tokens, so the
+  three runs of each come to about 65M.
+- What is fixed: the dataset revision, the model version (`jev-1.13.0`),
+  the dependency versions (`uv.lock`), the 32 few-shot examples per intent
+  (seeded), and retrieval (no randomness).
+- What is not: Jev's answers differ slightly between identical requests,
+  so expect the tables' figures to within about a point, not to the last
+  decimal. We checked this by deleting the results and following these
+  steps again: intent accuracy, slot F1, and frame accuracy came out within
+  0.6 points of the tables in every condition, and token counts within
+  0.1%. The slot F1 of a rare slot type can move by several points. The
+  figures also depend on TypeSafe continuing to serve `jev-1.13.0`.
+- The runs behind the tables are kept in the repository's history:
+  `git show bdad347:results/test-retrieved-run1.jsonl`, and likewise for
+  the other conditions and runs.
+
 ## Output
 
-Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
+Each run is written to `results/test-{condition}-run{n}.jsonl`, one record
 per utterance: the tokens and gold labels, the condition, the predicted
 intent and its probabilities, the predicted slot tags, the probabilities of
 every slot question's options, and the input tokens used. The API reports
