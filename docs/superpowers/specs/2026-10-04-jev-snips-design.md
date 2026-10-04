@@ -57,16 +57,35 @@ stop the run instead of being recorded as a wrong answer.
 | Module           | Responsibility                                                        |
 | ---------------- | --------------------------------------------------------------------- |
 | `config.py`      | Constants: `MODEL`, `MAX_WORKERS`, `SPLIT`, `DATASET_REPO`, `NONE`    |
-| `data.py`        | Download and parse a split and the label files                        |
+| `models.py`      | Pydantic models for parsed data and saved predictions                 |
+| `data.py`        | Download a split and the label files and parse them into models       |
 | `jev.py`         | Build questions for one utterance, call Jev, decode both slot schemes |
 | `metrics.py`     | Intent accuracy, slot F1, semantic-frame accuracy                     |
 | `scripts/run.py` | Entry point: load, predict concurrently, save predictions, score, log |
 
+### Models
+
+All parsed data and all saved output are frozen pydantic models, so invalid
+rows fail at construction and the JSONL output has one schema.
+
+- `Utterance`: `tokens`, `intent`, `tags`. A validator rejects a row whose
+  token and tag counts differ, so a misaligned utterance cannot exist.
+- `SlotPrediction`: one scheme's result for one utterance: `tags`,
+  `probabilities` (question name to option probabilities), `input_tokens`.
+  A validator on `Prediction` requires each scheme's `tags` to match the
+  utterance length.
+- `Prediction`: the saved record: the `Utterance`, `intent` (predicted),
+  `intent_probabilities`, `token` and `span` (`SlotPrediction` each), and
+  `model` (the version the API returned).
+
+Records are written with `model_dump_json` and can be reloaded with
+`model_validate_json`.
+
 ### Data
 
-`data.py` downloads files with `hf_hub_download` and parses each row into
-tokens (`input.split()`), an intent, and gold BIO tags (`slots.split()`). It
-raises if a row's token and tag counts differ.
+`data.py` downloads files with `hf_hub_download` and parses each row into an
+`Utterance`: tokens (`input.split()`), an intent, and gold BIO tags
+(`slots.split()`).
 
 The intent inventory comes from `intent_labels.txt`, dropping `PAD` and
 `UNK`.
@@ -145,11 +164,9 @@ Known ceilings, all measured on the test split:
 `scripts/run.py` loads `.env`, builds one `TypeSafeClient`, and maps the
 prediction function over the split with a `ThreadPoolExecutor` and `tqdm`.
 
-Output is `results/{split}.jsonl`, one record per utterance: tokens, gold
-intent and tags, predicted intent, and for each scheme the predicted tags,
-per-question probabilities, and token usage, plus the model version the API
-returned. Metrics, token totals per scheme, and the returned model version
-are logged to wandb and with `logging.info`.
+Output is `results/{split}.jsonl`, one `Prediction` per line. Metrics, token
+totals per scheme, and the returned model version are logged to wandb and
+with `logging.info`.
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
 smoke run. `results/` is git-ignored.
@@ -174,6 +191,8 @@ pytest, functional style, no mocks:
 - Span decoding: a multi-word span, `none`, and two overlapping proposals
   where the higher-probability one wins.
 - Metrics: hand-built gold and predicted sequences with known scores.
+- Models: an `Utterance` with mismatched token and tag counts raises, and a
+  `Prediction` survives a JSON round trip unchanged.
 - Data: the real test file parses to 700 aligned rows with 7 intents, and
   the schema derived from train covers every gold slot type in test for its
   intent.
