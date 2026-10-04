@@ -247,7 +247,8 @@ the predicted intent most similar to it, by TF-IDF cosine over words and
 adjacent word pairs (`retrieval.py`, scikit-learn). The pool is
 `load_example_pool()`: every aligned training utterance whose text does not
 appear in the evaluated split. `load_examples()` samples the fixed few-shot
-set from the same pool.
+set from the same pool. The retrieval index holds only the first copy of
+each repeated text, so the examples retrieved for an utterance are distinct.
 
 ## Snips-style parse
 

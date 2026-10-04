@@ -48,3 +48,28 @@ def test_the_pool_never_contains_an_evaluated_utterance() -> None:
         for examples in pool.values()
         for example in examples
     )
+
+
+def test_retrieve_never_returns_the_same_text_twice() -> None:
+    """A repeated training utterance fills one example slot, not several."""
+    pool = {
+        "PlayMusic": [
+            utterance("play some jazz"),
+            utterance("play some jazz"),
+            utterance("play some rock"),
+        ]
+    }
+    found = retrieve(build_index(pool), "PlayMusic", ("play", "some", "jazz"), 2)
+    assert [" ".join(example.tokens) for example in found] == [
+        "play some jazz",
+        "play some rock",
+    ]
+
+
+def test_the_first_copy_of_a_repeated_text_supplies_its_labels() -> None:
+    """When copies of a text disagree on labels, the first one is shown."""
+    tokens = ("play", "jazz")
+    first = Utterance(tokens=tokens, intent="PlayMusic", tags=("O", "B-genre"))
+    second = Utterance(tokens=tokens, intent="PlayMusic", tags=("O", "B-playlist"))
+    index = build_index({"PlayMusic": [first, second]})
+    assert retrieve(index, "PlayMusic", tokens, 2) == [first]
