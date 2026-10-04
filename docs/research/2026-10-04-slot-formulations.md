@@ -257,9 +257,10 @@ dev halves.
 | 51  | No Jev: copy each word's most common label from the 8 most similar utterances | 72.0        | 29%             | 0      |
 
 - **46** is the benchmark's `retrieved` condition. Test, three runs with the
-  predicted intent: 86.2 slot F1 (86.1–86.3), 68.0 frame accuracy
-  (67.6–68.3), 3.13M slot input tokens per run. The pool on test is the
-  13,019 aligned training utterances whose text is not a test utterance.
+  predicted intent: 86.2 slot F1 (85.9–86.5), 68.2 frame accuracy
+  (67.9–68.6), 3.14M slot input tokens per run. The pool on test is the
+  12,833 distinct aligned training utterances whose text is not a test
+  utterance.
 - The test gain over fixed few-shot is 2.7 points; the dev set predicted
   4.2. Dev utterances come from the same split as the pool, so their nearest
   neighbours are closer than a test utterance's.
@@ -267,18 +268,19 @@ dev halves.
   and 4% of utterances have one at 0.8 or above, so this is not copying from
   exact near-duplicates. Row 51 confirms it: label copying from the same
   examples is 17.5 points behind.
-- SNIPS utterances are templated, though. On test, 84 of the 700 utterances
+- SNIPS utterances are templated, though. On test, 86 of the 700 utterances
   (12%) retrieve at least one example exactly one word away ("what movies
   are playing at mann theatres" against "... amc theatres"), and most of
   those examples have the same tag sequence. The top-1 cosine on test has
   mean 0.50, with 4.4% at 0.8 or above and none at 1.0.
-- The pool keeps the training split's repeated utterances (186 repeated
-  texts), so 18% of test utterances are shown the same example twice among
-  their 8. Removing repeats would change the condition and was not run.
-- Descriptions add about half a point once examples are shown (46 against
-  49, 41 against 50), which is within the noise on the dev set.
-- Eight examples are enough. More than eight does not help, and with
-  retrieval the fixed sample's cost can be halved.
+- **Repeated texts in the pool made no measurable difference.** The
+  training split repeats 147 utterance texts (186 extra copies), so at
+  first 18% of test utterances were shown the same example twice among
+  their 8. Indexing only the first copy of each text gives everyone 8
+  distinct examples. On test, three runs each: 86.2 slot F1 before
+  (86.1–86.3) and after (85.9–86.5), frame accuracy 68.0 before and 68.2
+  after. The benchmark keeps the deduplicated index, since it is what "the
+  8 most similar" should mean.
 
 ### One question per slot, options are words
 

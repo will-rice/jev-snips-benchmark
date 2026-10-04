@@ -20,7 +20,7 @@ condition, with the range across runs in brackets.
 | Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
 | Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
 | Few-shot     | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
-| Retrieved    | 95.0 (94.9–95.1) | 86.2 (86.1–86.3) | 68.0 (67.6–68.3) |
+| Retrieved    | 95.1 (95.0–95.3) | 86.2 (85.9–86.5) | 68.2 (67.9–68.6) |
 
 Names and descriptions are zero-shot. Few-shot adds a fixed 32 labelled
 training utterances per intent to the descriptions condition. Retrieved
@@ -45,7 +45,7 @@ What the numbers say:
 - **Choosing examples by similarity beats a fixed sample, for half the
   tokens.** Showing the 8 training utterances most like the one being
   labelled scores 86.2 slot F1 against 83.5 for 32 fixed ones, and gets 68%
-  of utterances entirely right against 62%. It draws on all 13,019 usable
+  of utterances entirely right against 62%. It draws on all 12,833 distinct
   training utterances, though, where few-shot uses 224. SNIPS utterances
   are templated, so 12% of test utterances retrieve an example that differs
   from them by one word. Jev is still doing more than looking labels up:
@@ -65,8 +65,8 @@ What the numbers say:
   [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
   In every condition with examples, the weakest slots are titles and names
-  that only context can tell apart. With retrieved examples: `album` (33),
-  `entity_name` (49), `movie_name` (50), `track` (55), `object_name` (59).
+  that only context can tell apart. With retrieved examples: `album` (36),
+  `entity_name` (49), `movie_name` (50), `track` (53), `object_name` (59).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -78,7 +78,7 @@ Input tokens per run, mean of three runs:
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
 | Few-shot     | 336,703 | 6,608,202 |
-| Retrieved    | 336,703 | 3,133,568 |
+| Retrieved    | 336,703 | 3,139,692 |
 
 ### Against the approaches the Jev docs recommend
 
@@ -151,7 +151,8 @@ and descriptions no training utterance is sent to the model.
 - **Retrieved.** As few-shot, but the examples are chosen per utterance: the
   8 training utterances of the predicted intent most similar to it, by
   TF-IDF cosine over words and adjacent word pairs. The pool is every usable
-  training utterance (13,019), so this condition uses the whole training
+  training utterance, with repeated texts counted once (12,833), so this
+  condition uses the whole training
   split as a lookup table, without training on it.
 
 Names and descriptions are zero-shot. The descriptions were written from the

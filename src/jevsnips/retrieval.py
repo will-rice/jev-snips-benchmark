@@ -12,12 +12,20 @@ ExampleIndex = dict[str, tuple[TfidfVectorizer, spmatrix, Sequence[Utterance]]]
 
 
 def build_index(pool: Mapping[str, Sequence[Utterance]]) -> ExampleIndex:
-    """Index each intent's examples by the TF-IDF of their words and word pairs."""
+    """Index each intent's examples by the TF-IDF of their words and word pairs.
+
+    SNIPS repeats some training utterances. Only the first copy of a text is
+    indexed, so retrieval never spends two example slots on the same text.
+    """
     index: ExampleIndex = {}
     for intent, examples in pool.items():
+        first_by_text: dict[tuple[str, ...], Utterance] = {}
+        for example in examples:
+            first_by_text.setdefault(example.tokens, example)
+        distinct = list(first_by_text.values())
         vectorizer = TfidfVectorizer(analyzer=words_and_pairs)
-        matrix = vectorizer.fit_transform([example.tokens for example in examples])
-        index[intent] = (vectorizer, matrix, examples)
+        matrix = vectorizer.fit_transform([example.tokens for example in distinct])
+        index[intent] = (vectorizer, matrix, distinct)
     return index
 
 
