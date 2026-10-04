@@ -39,12 +39,12 @@ Input tokens per run, mean of three runs:
 | Retrieved    | 2,658,401 | 2,645,952 |
 
 Jev's answers are not identical between runs, which is why each condition is
-run three times. The ranges are at most 1.3 points.
+run three times. The ranges are under one point.
 
 ### What the numbers say
 
 - **Intent detection needs almost nothing.** Names alone give 94.3%.
-  Definitions add 1.3 points, and retrieved examples 1.3 more.
+  Definitions add 1.3 points, and retrieved examples 1.2 more.
 - **An intent is best defined by its slots.** Each intent's option says what
   the intent is and lists its slots' definitions. With one sentence per
   intent and no slots, descriptions scored 95.1 and retrieved 96.2; with
@@ -83,9 +83,10 @@ run three times. The ranges are at most 1.3 points.
   examples, with the slot definitions moved into the state beside them,
   took the retrieved condition from 86.9 to 89.4 while cutting its slot
   tokens by 22%.
-- **Token classification beats the extraction patterns in the Jev docs** by
-  14 and 17 points of slot F1, for about 10% more tokens. See the next
-  section.
+- **One question per word beats one question per slot.** An earlier
+  formulation asked, for each slot, which run of words fills it. On the
+  test set it scored 72.7 slot F1 against 86.8, and it is not in the code.
+  It is recorded under "What we tried".
 - **It is still well short of a trained tagger.** That model has learned
   SNIPS's phrasing, slot vocabulary, and annotation conventions from 13,084
   labelled utterances, 64 of which repeat a test utterance. What Jev gets
@@ -93,82 +94,115 @@ run three times. The ranges are at most 1.3 points.
   retrieved examples: `album` (48), `track` (55), `cuisine` (59),
   `movie_name` (62), `poi` (63), `entity_name` (68).
 
-### Against the approaches the Jev docs recommend
-
-The Jev docs extract values by asking one question per field, not one per
-word. Both of their patterns are conditions of this benchmark
-(`patterns.py`), run on the same test set with the same intent request as
-the descriptions condition, three runs each.
-
-| Condition                                      | Slot method                                                     | Slot F1          | Frame accuracy   | Slot input tokens |
-| ---------------------------------------------- | --------------------------------------------------------------- | ---------------- | ---------------- | ----------------- |
-| **Descriptions (token classification)**        | One `Choice` per word over the slot types + `none`              | 86.8 (86.6–86.9) | 69.5 (69.3–69.9) | 4,062,064         |
-| `extraction` (extraction cookbook)             | One `Choice` per slot over candidate spans + `none`             | 72.7 (72.5–72.8) | 41.5 (41.1–41.7) | 3,750,174         |
-| `function_calling` (function-calling cookbook) | Per slot, a `stated` yes/no and a `Choice` over candidate spans | 69.6 (69.2–69.9) | 32.5 (31.7–33.0) | 3,626,549         |
-
-- The **extraction cookbook** has code find candidate values and asks Jev to
-  pick one or `none`. SNIPS slots have no pattern to find candidates with,
-  so the candidates are every run of consecutive words in the utterance.
-  The question names the intent and the slot and gives a one-sentence
-  definition: "The intent is PlayMusic. Which span of the utterance is the
-  artist? The name of the musician or band to play. Answer none if the
-  utterance has no artist."
-- The **function-calling cookbook** treats the intent as a function and each
-  slot as an argument: a yes/no question decides whether the argument is
-  stated at all, and a question "about the idea, not the parameter name"
-  picks its value. Its arguments are closed sets; ours are open, so the
-  options are again the utterance's spans. A slot is filled when `stated`
-  is at least 0.5.
-- Both ask about each slot type separately, so sibling types such as `city`
-  and `state` claim the same words and code has to pick a winner by
-  probability, with ties going to the slot whose name sorts last. After
-  that, on utterances with the intent right, 18% (extraction) and 22%
-  (function calling) of the slot types an utterance uses are left unfilled,
-  against 4% for token classification, which puts the slot types in one
-  distribution per word.
-- The comparison is not between equal efforts. The per-word definitions
-  were revised against training utterances. The patterns use a
-  one-sentence definition and a question pair per slot (`spec.py`); their
-  wording was chosen among six variants on the dev set, where the bare
-  cookbook-style question scored 67.6 and the wording above 75.1, but the
-  53 definitions themselves were not revised. With the same one-sentence
-  definitions, token classification scored 76.4.
-
 ## Method
 
-Slot filling is posed as token classification: every word gets exactly one
-class, a slot type or `none`. Each utterance takes two requests.
+Slot filling is posed as token classification: every word of the utterance
+gets exactly one class, a slot type of the predicted intent or `none`. Jev
+is asked one multiple-choice question (`Choice`) per word, and code joins
+neighbouring words of the same class into slot values. Nothing is trained.
 
-1. **Intent.** One `Choice` over the 7 intents, with the utterance as state.
-   Each intent's option carries what the intent is and the definitions of
-   its slots, because the slots an utterance fills are what tell
-   neighbouring intents apart.
-2. **Slots.** One `Choice` per word over the predicted intent's slot types
-   plus `none`, all in one request.
+Each utterance takes two requests. The walk-through below is the retrieved
+condition, the best one, for the utterance "add sabrina salerno to the
+grime instrumentals playlist". The other conditions leave parts out; see
+the table under Conditions.
+The definitions and example lists shown are shortened; the full
+definitions are in `descriptions.py`.
 
-The slot question's instructions are labelled fields, not a sentence, and
-the state is the utterance under an `utterance` key:
+### 1. Intent request
 
-```json
-{
-  "intent": "AddToPlaylist",
-  "words_before": "add sabrina",
-  "word": "salerno",
-  "words_after": "to the grime instrumentals playlist",
-  "question": "Which slot does `word` fill in `utterance`? Answer none if it fills no slot."
-}
-```
+One `Choice` over the 7 intents.
 
-When examples are shown (few-shot and retrieved), the slot definitions move
-out of the options into the state, under `slot_definitions`, where they are
-sent once instead of once per word, and the question becomes "Which slot
-does `word` fill in `utterance`? The slots are defined in
-`slot_definitions`. Label it the way matching words are labelled in
-`labelled_examples`. Answer none if it fills no slot."
+- **Options.** Each intent, described by what it is and by the definitions
+  of its slots, because the slots an utterance fills are what tell
+  neighbouring intents apart:
 
-Decoding turns the per-word classes into spans: adjacent words with the same
-type form one span, and up to two unlabelled words between two words of the
-same type join it, so the small words inside a title stay in its span.
+  ```json
+  {
+    "AddToPlaylist": {
+      "what": "Add a song, album or artist to one of the user's playlists. The request names what to add and the playlist to add it to, usually with add or put.",
+      "slots": {
+        "artist": "A word of the name of the musician or band whose music is being added, ...",
+        "playlist": "A word of the name of the playlist being added to: ..."
+      }
+    }
+  }
+  ```
+
+- **State.** The utterance and the 8 training utterances most similar to
+  it, from any intent, each with its intent:
+
+  ```json
+  {
+    "utterance": "add sabrina salerno to the grime instrumentals playlist",
+    "labelled_examples": [
+      {
+        "utterance": "include jesper kyd in the grime instrumentals playlist",
+        "intent": "AddToPlaylist"
+      }
+    ]
+  }
+  ```
+
+- **Question.** "What is the intent of `utterance`?"
+
+### 2. Slot request
+
+One `Choice` per word, all in one request, so an 8-word utterance sends 8
+questions.
+
+- **Options.** The slot types of the predicted intent, plus `none`. For
+  `AddToPlaylist`: `artist`, `entity_name`, `music_item`, `playlist`,
+  `playlist_owner`, `none`.
+- **State.** The utterance, a definition of every option, and the 8
+  training utterances of the predicted intent most similar to it, each with
+  a label for every word:
+
+  ```json
+  {
+    "utterance": "add sabrina salerno to the grime instrumentals playlist",
+    "slot_definitions": {
+      "artist": "A word of the name of the musician or band whose music is being added, ...",
+      "none": "A word of the request itself and not of any name or title: ..."
+    },
+    "labelled_examples": [
+      {
+        "utterance": "add ava leigh to my grime instrumentals playlist",
+        "words": [
+          { "word": "add", "slot": "none" },
+          { "word": "ava", "slot": "artist" },
+          { "word": "leigh", "slot": "artist" }
+        ]
+      }
+    ]
+  }
+  ```
+
+- **Question.** Labelled fields, not a sentence, one set per word. For the
+  third word:
+
+  ```json
+  {
+    "intent": "AddToPlaylist",
+    "words_before": "add sabrina",
+    "word": "salerno",
+    "words_after": "to the grime instrumentals playlist",
+    "question": "Which slot does `word` fill in `utterance`? The slots are defined in `slot_definitions`. Label it the way matching words are labelled in `labelled_examples`. Answer none if it fills no slot."
+  }
+  ```
+
+Without examples (names and descriptions), the state is only the utterance,
+each definition is attached to its option instead, and the question is
+"Which slot does `word` fill in `utterance`? Answer none if it fills no
+slot."
+
+### 3. Decoding
+
+Code turns the per-word answers into slot values: adjacent words with the
+same type form one value, and up to two `none` words between two words of
+the same type join it, so the small words inside a title stay in it.
+`none`, `artist`, `artist`, `none`, `none`, `playlist`, `playlist`, `none`
+becomes `artist` = "sabrina salerno" and `playlist` = "grime
+instrumentals".
 
 Only the slot types of the **predicted** intent are offered, the way an
 assistant's schema restricts which slots an intent accepts. The gold intent
@@ -230,26 +264,28 @@ its own labels. Supervised results on SNIPS include them in training.
 Two spans of the same slot type separated by two words or fewer are merged
 into one. That affects none of the test set's 1,790 gold slot spans.
 
-In the two docs patterns an option is a span's text, so a text that occurs
-twice in an utterance ("5 out of 5") can only be placed at its first
-position, and the longest spans of an utterance over 22 words are not
-offered. That affects 1 of the 1,790 gold spans and one utterance.
-
 Slot values are the words of the utterance. Nothing resolves a value such as
 a time expression into a structured value.
 
 ## Checked against the Jev docs
 
 We read all of the Jev documentation against this implementation. Where the
-docs give guidance, the benchmark follows it, with two deliberate exceptions.
+docs give guidance, the benchmark follows it, with one deliberate exception.
 
 - **Followed:** one narrow judgment per question; labelled fields instead of
   string templates; backticked references to the parts of the state a
   question should use; a no-match option with its own definition; reference
-  material in the state; in the best condition, only relevant context in
+  material and examples in the state; in the best condition, only relevant context in
   the state (8 retrieved examples, where few-shot shows 32 fixed ones); a
   pinned model version (`jev-1.13.0`, not the `jev-latest`
   alias); all of a word-level request's questions in one call.
+- **Not taken from the docs: one question per word.** The docs extract a
+  value by having Jev pick among candidates that code supplies: found by a
+  regular expression, taken from a fixed list or a roster, or proposed by a
+  named-entity recognizer or an LLM. A song title has no pattern or list,
+  and this benchmark uses no second model to propose candidates. Asking
+  about each word, with the slot types as the options, needs no candidates.
+  It is this benchmark's own formulation.
 - **Tested and found not to matter:** the docs warn that Jev leans toward
   the first option and say to reorder and check. Reversing or shuffling the
   slot options changes about 1% of answers and no score.
@@ -259,9 +295,6 @@ docs give guidance, the benchmark follows it, with two deliberate exceptions.
   all depend on the predicted intent, which is the case the docs allow a
   second request for. A single-request version would ask the slot questions
   for all seven intents at roughly seven times the slot tokens.
-- **Exception, examples in the state.** The docs show examples inside option
-  descriptions or instruction fields. Whole labelled utterances in the state
-  are billed once per request and scored higher here.
 
 ## What we tried
 
@@ -322,19 +355,19 @@ one-sentence definitions.
 | Only the words so far, last word bracketed, earlier labels shown                                                                                                               | 45.3        | 4,756  |
 | Only the words so far, no bracket, `none` described                                                                                                                            | 47.0        | 4,680  |
 | The same, earlier labels shown                                                                                                                                                 | 22.2        | 4,912  |
-| **Per slot, options are spans (the docs' patterns)**                                                                                                                           |             |        |
-| Extraction cookbook: sentence question, spans plus `none` (**the `extraction` condition**; 75.1 when re-run)                                                                   | 75.5        | 5,084  |
+| **Per slot, options are every span of words (removed)**                                                                                                                        |             |        |
+| Sentence question naming the slot, with its definition; spans plus `none` (75.1 when re-run)                                                                                   | 75.5        | 5,084  |
 | The same, instructions as labelled fields                                                                                                                                      | 76.2        | 5,359  |
 | The same, asked only for slots a word-level question says are present                                                                                                          | 75.3        | ~4,000 |
-| Function-calling cookbook: `stated` yes/no plus a span question                                                                                                                | 66.7 †      | 4,970  |
-| The same, the span question followed by the slot's one-sentence definition (**the `function_calling` condition**)                                                              | 70.7        | 5,046  |
-| Extraction cookbook: a question about the idea, no slot name or definition                                                                                                     | 67.6        | 4,999  |
+| A `stated` yes/no per slot plus a span question about the idea, not the slot's name                                                                                            | 66.7 †      | 4,970  |
+| The same, the span question followed by the slot's one-sentence definition                                                                                                     | 70.7        | 5,046  |
+| Spans plus `none`, a question about the idea, no slot name or definition                                                                                                       | 67.6        | 4,999  |
 | **Per slot, options are words**                                                                                                                                                |             |        |
 | Top word only                                                                                                                                                                  | 48.6        | 1,303  |
 | Top 3 words above 10% of the top probability, span from first to last                                                                                                          | 67.9        | 1,303  |
 | Top word as anchor, then a second question over spans containing it                                                                                                            | 61.3        | 2,890  |
 | **Combination**                                                                                                                                                                |             |        |
-| Per-word labels with the extraction cookbook's span boundaries                                                                                                                 | 79.8 †      | 8,097  |
+| Per-word labels with the span question's boundaries                                                                                                                            | 79.8 †      | 8,097  |
 
 † Scored on the second half of the dev set, where the per-word question
 with one-sentence definitions scores 77.8.
@@ -375,8 +408,9 @@ What we learned, beyond the findings at the top:
 - A yes/no about each adjacent pair of words ("part of the same name or
   title?") is too unreliable to rebuild spans from.
 - Moving definitions into the state only helps when examples are there too.
-  Without examples it saves 38% of the tokens but loses frame accuracy, so
-  the descriptions condition keeps them on the options.
+  Without examples it saves 62% of the tokens but costs a point of slot F1
+  and four of frame accuracy on the dev set, so the descriptions condition
+  keeps them on the options.
 - With examples, descriptions add about half a point; without examples they
   add 17.
 - The remaining errors are mostly small words inside names ("the", "of")
@@ -400,8 +434,7 @@ Add your `TYPESAFE_API_KEY` to `.env`.
 ## Usage
 
 Run a condition three times on the full test set (`names`, `descriptions`,
-`fewshot`, `retrieved`, or one of the docs' patterns, `extraction` and
-`function_calling`):
+`fewshot`, or `retrieved`):
 
 ```bash
 uv run run retrieved
@@ -421,9 +454,56 @@ uv run run names --limit 20
 
 A limited run writes to its own files and leaves the full results in place.
 
+## Reproducing the results
+
+The predictions are not in the repository; `results/` is git-ignored. With
+a TypeSafe API key in `.env`, these five commands regenerate every number
+in the Results section:
+
+```bash
+uv run run names
+```
+
+```bash
+uv run run descriptions
+```
+
+```bash
+uv run run fewshot
+```
+
+```bash
+uv run run retrieved
+```
+
+```bash
+uv run report
+```
+
+- Each `run` evaluates the 700 test utterances three times, saves the
+  predictions, and logs the three metrics and the input tokens, each as a
+  mean and range over the runs. `report` reads the saved runs and adds the
+  figures for utterances with the intent right in every condition and the
+  slot F1 of each slot type.
+- One pass over all four conditions is about 21.8M input tokens, so the
+  three runs of each come to about 65M.
+- What is fixed: the dataset revision, the model version (`jev-1.13.0`),
+  the dependency versions (`uv.lock`), the 32 few-shot examples per intent
+  (seeded), and retrieval (no randomness).
+- What is not: Jev's answers differ slightly between identical requests,
+  so expect the tables' figures to within about a point, not to the last
+  decimal. We checked this by deleting the results and following these
+  steps again: intent accuracy, slot F1, and frame accuracy came out within
+  0.6 points of the tables in every condition, and token counts within
+  0.1%. The slot F1 of a rare slot type can move by several points. The
+  figures also depend on TypeSafe continuing to serve `jev-1.13.0`.
+- The runs behind the tables are kept in the repository's history:
+  `git show bdad347:results/test-retrieved-run1.jsonl`, and likewise for
+  the other conditions and runs.
+
 ## Output
 
-Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
+Each run is written to `results/test-{condition}-run{n}.jsonl`, one record
 per utterance: the tokens and gold labels, the condition, the predicted
 intent and its probabilities, the predicted slot tags, the probabilities of
 every slot question's options, and the input tokens used. The API reports
@@ -439,7 +519,7 @@ Each record also carries a `parse` in the shape of a Snips NLU result:
   "slots": [
     { "value": "sabrina salerno", "entity": "artist", "slotName": "artist" },
     {
-      "value": "grime instrumentals playlist",
+      "value": "grime instrumentals",
       "entity": "playlist",
       "slotName": "playlist"
     }
@@ -471,8 +551,6 @@ src/jevsnips/
 ├── descriptions.py  # Definitions of intents, slots, and none
 ├── retrieval.py     # Choose examples by similarity to the utterance
 ├── jev.py           # Build questions, call Jev, decode answers
-├── patterns.py      # The Jev docs' two extraction patterns
-├── spec.py          # A value and a stated question per slot, for patterns.py
 ├── metrics.py       # Intent accuracy, slot F1, frame accuracy
 └── scripts/
     ├── run.py       # Run one condition

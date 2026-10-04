@@ -227,8 +227,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Smoke-run outputs (full-run results are committed)
-results/*-first*.jsonl
+# Run outputs: predictions are regenerated with `uv run run`
+results/
 
 # Plan execution scratch
 .superpowers/

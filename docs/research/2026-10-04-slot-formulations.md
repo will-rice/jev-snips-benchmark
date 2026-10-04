@@ -61,13 +61,13 @@ The sections below are grouped by kind of formulation, not by date.
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
 - The **benchmark** code contains formulations 57, 65, 67, 72 (6 with
-  rewritten definitions), 78 (intent options with their slots), and the
-  docs' two patterns as comparison conditions, 81 and 84.
+  rewritten definitions), and 78 (intent options with their slots).
   Everything else here was a throwaway script, except formulations that
-  were in the benchmark for a time and then superseded: 12 (a second slot
-  method, back as 81), 35 and 41 (earlier few-shot formats), and 46 (the retrieved slot
-  request before 65). Their test figures below are from when they were
-  current.
+  were in the benchmark for a time and then removed: 12 (a second slot
+  method), 81 and 84 (span formulations added as conditions and removed
+  the same day), 35 and 41 (earlier few-shot formats), and 46 (the
+  retrieved slot request before 65). Their test figures below are from
+  when they were current.
 - The dev set is drawn from the same split as the few-shot examples, and it
   overstated every example-based gain. Each change was confirmed on the test
   set before it was kept; test figures are given where they exist.
@@ -139,26 +139,33 @@ plus `none`. Overlapping answers are resolved by probability.
 | 16  | Instructions as labelled fields (`intent`, `field`, `question`)    | 76.2        | 41%             | 5,359  |
 | 17  | As 12, asked only for slots a word-level question says are present | 75.3        | —               | ~4,000 |
 
-- **12** follows the docs' extraction cookbook (code supplies candidates,
-  Jev picks one or `none`). It was a second benchmark method, was removed,
-  and is back as the `extraction` condition (81). Test at the time, three runs: 48.3 slot F1 with names, 72.2 with
-  descriptions (frame accuracy 19.3 and 40.5), at 3.65M input tokens per
-  run against 2.11M for token classification.
+- **12** takes its question shape from the docs' value-extraction cookbook:
+  Jev picks one of the candidates or `none`. In the cookbook, code finds
+  the candidates with a pattern such as a regular expression. SNIPS slots
+  have no such pattern, so here the candidates were every span of words.
+  That substitution is ours; the docs do not describe it. 12 was a second
+  benchmark method and was removed. Test at the time, three runs: 48.3
+  slot F1 with names, 72.2 with descriptions (frame accuracy 19.3 and
+  40.5), at 3.65M input tokens per run against 2.11M for token
+  classification.
 - Row 17 was estimated from saved answers by removing spans, without
   re-resolving overlaps, so it is a lower bound; its token figure is an
   estimate.
 - Wording for 12: `The intent is {intent}. Which span of the utterance is
 the {slot}? {description} Answer none if the utterance has no {slot}.`
 
-### The function-calling cookbook's pattern
+### A `stated` yes/no per slot, after the function-calling cookbook
 
-The docs' function-calling cookbook treats the intent as a function and each
-slot as an argument. Per slot it asks a `stated` yes/no ("does the user say
-anything about this?") and a value `Choice` whose question is written about
-the idea, not the parameter name. Its arguments are closed sets; here the
-options are the utterance's spans, with no `none`. A slot is filled when
-`stated` is at least 0.5; overlaps go to the higher of
-min(`stated`, value probability).
+The docs' function-calling cookbook treats a request as a function call. For
+each argument it asks a `stated` yes/no ("does the user say anything about
+this?") and a value `Choice` whose question is written about the idea, not
+the parameter name. Its arguments take values from fixed lists, and it gives
+free text, numbers, and dates no question at all. Formulation 26 borrows
+the two questions and applies them to SNIPS slots, which are mostly free
+text, with the utterance's spans as the options and no `none`. That is our
+adaptation, not the cookbook's pattern. A slot is filled when `stated` is
+at least 0.5; overlaps go to the higher of min(`stated`, value
+probability).
 
 | #   | Formulation                                         | Dev slot F1 | All slots right | Tokens |
 | --- | --------------------------------------------------- | ----------- | --------------- | ------ |
@@ -172,7 +179,7 @@ min(`stated`, value probability).
   (formulation 12 answers with a span instead of `none` for 27%), but says
   no for 12.5% of the ones it does use (about 2% for formulation 12).
 - The 53 question pairs were written for this test and replaced the slot
-  descriptions, so the result reflects that wording as well as the pattern.
+  descriptions, so the result reflects that wording as well as the formulation.
 - Example, `city` under `GetWeather`: value question "Which city or town
   does the user want the weather for?", stated question "Does the user name
   a city or town, as opposed to a state or a country?"
@@ -404,11 +411,10 @@ errors:
 - Say what one word must be, since the question is about one word: "A word
   of the title of an album", not "The title of the album".
 - Name typical words, and the words that look similar but do not count:
-  `music_item` is "song, track, album ... Not the general words music,
-  songs, tunes".
-- State SNIPS's boundary conventions: "The word playlist or list that
-  follows the name is not part of it"; "In this current book only current
-  counts".
+  `music_item` under `PlayMusic` lists the generic words that count and
+  then the general words that do not (music, songs, tunes).
+- State SNIPS's boundary conventions: "The word playlist that follows the
+  name is not part of it."; which word of "this current book" counts.
 
 Slot F1 and share of utterances with every word right, on each intent's 200
 search utterances:
@@ -496,32 +502,37 @@ search (1,400) and check (700) utterances:
   ("find fish story") and `SearchCreativeWork` read as `PlayMusic`. Several
   of these are ambiguous or mislabelled in SNIPS.
 
-### The docs' patterns in the benchmark code
+### Span formulations as benchmark conditions, added and removed
 
-Formulations 12 and 26 had been run with throwaway scripts. They are now
-conditions of the benchmark, `extraction` and `function_calling`
-(`patterns.py`), so their implementation is tested and their runs are saved
-like every other condition's. `spec.py` holds, per slot, the one-sentence
-definition from the first set of definitions and the question pair written
-for formulation 26.
+Formulations 12 and 26 had been run with throwaway scripts. Briefly they
+were conditions of the benchmark, named `extraction` and `function_calling`
+and described as the Jev docs' patterns. They were removed: the benchmark's
+method is token classification, and the description was wrong. As noted
+under 12 and 26, the docs' cookbooks pick among candidates that code
+supplies (found by pattern, taken from a fixed list or roster, or proposed
+by a named-entity recognizer or an LLM); offering every span of words is
+our substitution. The code and its saved runs are in the repository's
+history at commit `bdad347`. Each slot had a one-sentence definition from the first set of
+definitions and the question pair written for formulation 26.
 
-Wordings were compared on the dev set with the gold intent before the test
-runs:
+In the table, "pick or none" is formulation 12's shape and "stated" is
+26's. Wordings were compared on the dev set with the gold intent before the
+test runs:
 
-| #   | Pattern          | Value question                                                                  | Dev slot F1 | All slots right | Tokens |
-| --- | ---------------- | ------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
-| 80  | Extraction       | The question about the idea only ("Which musician or band ...?")                | 67.6        | 29%             | 4,999  |
-| 81  | Extraction       | **Formulation 12's sentence: intent, slot name, definition, "Answer none ..."** | 75.1        | 46%             | 5,224  |
-| 82  | Extraction       | Labelled fields `{"question", "definition"}`                                    | 69.7        | 31%             | 5,171  |
-| 83  | Extraction       | Idea question, definition, "Answer none if the utterance does not say."         | 71.5        | 36%             | 5,156  |
-| 84  | Function calling | **Idea question followed by the definition, plus `stated`**                     | 70.7        | 32%             | 5,046  |
-| 85  | Function calling | Formulation 12's sentence without the `none` clause, plus `stated`              | 71.6        | 37%             | 5,107  |
+| #   | Shape        | Value question                                                                  | Dev slot F1 | All slots right | Tokens |
+| --- | ------------ | ------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
+| 80  | Pick or none | The question about the idea only ("Which musician or band ...?")                | 67.6        | 29%             | 4,999  |
+| 81  | Pick or none | **Formulation 12's sentence: intent, slot name, definition, "Answer none ..."** | 75.1        | 46%             | 5,224  |
+| 82  | Pick or none | Labelled fields `{"question", "definition"}`                                    | 69.7        | 31%             | 5,171  |
+| 83  | Pick or none | Idea question, definition, "Answer none if the utterance does not say."         | 71.5        | 36%             | 5,156  |
+| 84  | Stated       | **Idea question followed by the definition, plus `stated`**                     | 70.7        | 32%             | 5,046  |
+| 85  | Stated       | Formulation 12's sentence without the `none` clause, plus `stated`              | 71.6        | 37%             | 5,107  |
 
-- **81** and **84** are in the code. 85 scores a point higher than 84 but
-  names the question after the parameter, which the function-calling
-  cookbook says not to do; 84 keeps to the cookbook.
-- Naming the slot and defining it is worth 7.5 points to the extraction
-  pattern (80 against 81). The cookbook's advice to ask about the idea and
+- **81** and **84** were the two conditions. 85 scores a point higher than
+  84 but names the question after the slot, which the function-calling
+  cookbook advises against for its own questions.
+- Naming the slot and defining it is worth 7.5 points to the pick-or-none
+  question (80 against 81). The cookbook's advice to ask about the idea and
   not the parameter name fits its closed sets, where each option has its
   own description. With spans as options the question is the only place a
   definition can go.
@@ -530,23 +541,24 @@ runs:
   | Condition                           | Slot F1          | Frame accuracy   | Slot input tokens |
   | ----------------------------------- | ---------------- | ---------------- | ----------------- |
   | Descriptions (token classification) | 86.8 (86.6–86.9) | 69.5 (69.3–69.9) | 4,062,064         |
-  | `extraction`                        | 72.7 (72.5–72.8) | 41.5 (41.1–41.7) | 3,750,174         |
-  | `function_calling`                  | 69.6 (69.2–69.9) | 32.5 (31.7–33.0) | 3,626,549         |
+  | Pick or none over spans (81)        | 72.7 (72.5–72.8) | 41.5 (41.1–41.7) | 3,750,174         |
+  | Stated plus a span question (84)    | 69.6 (69.2–69.9) | 32.5 (31.7–33.0) | 3,626,549         |
 
-- A first test run of both patterns with the bare idea question (80, and 26
+- A first test run of both with the bare idea question (80, and 26
   as originally written) scored 66.8 and 66.9.
 - On utterances with the intent right, the decoded output leaves 18.5%
-  (extraction) and 22.2% (function calling) of the slot types an utterance
+  (81) and 22.2% (84) of the slot types an utterance
   uses unfilled, and fills 4.4% and 5.7% of the ones it does not use. Token
   classification: 4.2% and 2.7%.
 - The efforts are not equal. The per-word definitions were revised against
-  training utterances; the patterns' definitions are the first drafts.
+  training utterances; the span questions' definitions are the first drafts.
   With those same first drafts token classification scored 76.4 on test, so
   about 4 points of the gap is the formulation and the rest is the
   definitions. Nobody has written span-level definitions with the same
   care.
-- Saved probabilities now leave out options scored 0.00. A span question
-  has up to 255 options, and a run's file would otherwise be about 10 MB.
+- Saved probabilities leave out options scored 0.00, a change made when a
+  span question's 255 options made a run's file about 10 MB. It was kept
+  after the span conditions were removed; runs are written in that form.
 
 ### A full read of the Jev docs
 
@@ -717,12 +729,17 @@ word that points to the work without naming it, or the kind of work."}`
   about where it was and cost 47% more tokens (row 24). Telling Jev that
   every word of a title counts halved the missed title words but pulled
   more outside words into slots, for a net loss (row 25).
-- **The docs' patterns ask per field, and that is their weakness here.**
-  Both cookbook patterns (rows 12 and 26, now 81 and 84 in the code) ask
-  about each slot type on its own. With the same one-sentence definitions,
-  token classification beat them on test by 4 and 7 points of slot F1 at
-  about 60% of the tokens; with its current definitions it is 14 and 17
-  points ahead.
+- **Asking per slot is the span formulations' weakness.** Both (rows 12 and
+  26, later 81 and 84) ask about each slot type on its own. With the same
+  one-sentence definitions, token classification beat them on test by 4
+  and 7 points of slot F1 at about 60% of the tokens; with its current
+  definitions it is 14 and 17 points ahead.
+- **The docs' extraction recipe needs a candidate finder.** Their
+  cookbooks pick among candidates that code supplies: found by pattern,
+  taken from a fixed list or roster, or proposed by a named-entity
+  recognizer or an LLM. A song title has no pattern or list, and no second
+  model was used here. The span formulations offered every span instead,
+  and were wrongly labelled as the docs' patterns for a time.
 - **A `stated` gate trades false proposals for misses** and loses overall
   (row 26).
 - **Two formulations together beat either alone** (row 27), at 2.7 times the
@@ -735,8 +752,12 @@ word that points to the work without naming it, or the kind of work."}`
 
 ## Not tried
 
-- Span-level definitions for the docs' patterns written and revised with
-  the care the per-word definitions got.
+- Span-level definitions for the span formulations written and revised
+  with the care the per-word definitions got.
+- The value-extraction cookbook as written: a code-side finder for the
+  slots that have a pattern (numbers, times), or candidates proposed by a
+  named-entity recognizer or an LLM for names and titles, with Jev picking
+  among what it finds.
 - The intent options' slot definitions held once in the state. The intent
   request has one question, so it would not save tokens.
 - A beam over the top two or three intents, keeping the intent whose slot

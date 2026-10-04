@@ -71,10 +71,10 @@ def test_prediction_parse_is_a_snips_style_result() -> None:
 
 
 def test_slot_prediction_omits_options_given_no_probability() -> None:
-    """A span question has up to 255 options, nearly all scored 0.00."""
+    """Jev reports two decimals, so an omitted option is one scored 0.00."""
     slots = SlotPrediction(
         tags=("O",),
-        probabilities={"artist": {"abba": 0.9, "play": 0.0, "none": 0.1}},
+        probabilities={"token_0": {"artist": 0.9, "album": 0.0, "none": 0.1}},
         input_tokens=1,
     )
-    assert slots.probabilities == {"artist": {"abba": 0.9, "none": 0.1}}
+    assert slots.probabilities == {"token_0": {"artist": 0.9, "none": 0.1}}
