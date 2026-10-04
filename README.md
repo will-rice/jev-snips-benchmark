@@ -1,215 +1,149 @@
-# Agent Harness Template
+# Jev on SNIPS
 
-A batteries-included template for building AI agent evaluation harnesses using modern Python tooling.
+Zero-shot evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's
+"System One" decision model, on the SNIPS natural language understanding
+benchmark: intent detection and slot filling.
 
-## Features
+Jev does not generate text. It takes some state and a set of typed questions
+and returns typed answers with probabilities. This project asks how far that
+gets on a task normally solved by a trained tagger, without showing the model
+a single labelled example.
 
-- **Pydantic Configuration**: Type-safe configuration management
-- **Protocol-based Design**: Clean `Agent` and `Task` protocols for easy extensibility
-- **Result Tracking**: Structured result collection with `pydantic` models
-- **Modern Tooling**: Built with `uv` for fast dependency management
-- **Code Quality**: Pre-configured with `ruff`, `ty`, `pytest`, and `pre-commit` hooks
+## Results
 
-## Project Structure
+SNIPS test set, 700 utterances, model `jev-1.13.0`, zero-shot.
 
-```
-.
-├── src/agent_harness/
-│   ├── agent.py               # Agent protocol
-│   ├── config.py              # Pydantic configuration
-│   ├── harness.py             # Main Harness class
-│   ├── result.py              # Result data models
-│   ├── task.py                # Task protocol
-│   └── scripts/
-│       └── run.py             # Entry point script
-├── tests/                     # Test files
-├── pyproject.toml             # Project metadata and dependencies
-├── .pre-commit-config.yaml    # Pre-commit hooks configuration
-└── .env.example               # Example environment variables
-```
+| Metric                  | Token scheme | Span scheme |
+| ----------------------- | ------------ | ----------- |
+| Intent accuracy         | 94.3%        | 94.3%       |
+| Slot F1                 | 26.0%        | 49.1%       |
+| Semantic-frame accuracy | 0.9%         | 20.6%       |
+| Input tokens            | 926,053      | 3,614,597   |
 
-## Quick Start
+Intent accuracy is shared: both schemes use the same predicted intent, which
+took a further 252,703 input tokens.
 
-### 1. Install uv
+Supervised models trained on the 13,084 SNIPS training utterances reach
+roughly 98–99% intent accuracy and 96–97% slot F1; nothing here is trained.
+Zero-shot intent detection from intent names alone is close to that. Slot
+filling from slot names alone is not: letting the model choose a whole span
+nearly doubles slot F1 over labelling words independently, but both remain
+far below a trained tagger.
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+## Method
 
-### 2. Use this template for a new project
+Each utterance gets three requests, all with the utterance as state.
 
-When creating a new project from this template:
+1. **Intent.** One `Choice` over the 7 intent names.
+2. **Token scheme.** One `Choice` per word, asking which slot type the
+   bracketed word fills (`add sabrina [salerno] to the ...`). Adjacent words
+   with the same type are merged into one span.
+3. **Span scheme.** One `Choice` per slot type, asking which span of the
+   utterance fills it. The options are the utterance's contiguous word spans.
+   When two slot types pick overlapping spans, the more probable one is kept.
 
-1. Clone or fork this repository
-2. Rename the `src/agent_harness` directory to your project name:
-   ```bash
-   mv src/agent_harness src/your_project_name
-   ```
-3. Update `pyproject.toml`:
-   - Change `name = "agent_harness"` to your project name
-   - Update `module-name = ["agent_harness"]` to your project name
-   - Update the `run` script path in `[project.scripts]`
-4. Update import statements in Python files to use your new project name
+Both slot schemes offer only the slot types of the **predicted** intent, the
+way an assistant's schema restricts which slots an intent accepts. The gold
+intent is never used, so an intent error costs the slots as well.
 
-### 3. Install dependencies
+The condition is strictly zero-shot: the model sees intent names, slot names,
+and span texts, with no descriptions and no examples. The mapping from intent
+to slot types is read from the training split's labels; no training utterance
+is sent to the model.
+
+### Metrics
+
+- **Intent accuracy:** utterances with the correct intent.
+- **Slot F1:** span-level micro F1 (conlleval, via `seqeval`).
+- **Semantic-frame accuracy:** utterances with the correct intent and every
+  slot tag correct.
+
+### Known limitations
+
+Measured on the test set's 1,790 gold slot spans:
+
+| Limitation                                                    | Scheme | Spans affected |
+| ------------------------------------------------------------- | ------ | -------------- |
+| Two adjacent spans of the same type merge into one            | Token  | 0              |
+| A slot type can fill only one span per utterance              | Span   | 0              |
+| A span whose text also occurs earlier resolves to the earlier | Span   | 1              |
+
+A `Choice` takes at most 255 options, so utterances longer than 22 words
+offer spans up to the longest length that fits (14 words for the longest
+test utterance, above the longest gold span of 10).
+
+## Setup
 
 ```bash
 uv sync
 ```
 
-### 4. Set up environment variables
-
-Copy the example environment file and add your API keys:
-
 ```bash
 cp .env.example .env
-# Edit .env and add your API keys
 ```
 
-### 5. Install pre-commit hooks
-
-```bash
-uv run pre-commit install
-```
+Add your `TYPESAFE_API_KEY` to `.env`, and log in to Weights & Biases or add
+`WANDB_API_KEY`.
 
 ## Usage
 
-### Running the Harness
-
-Run the entry point script:
+Evaluate the full test set:
 
 ```bash
 uv run run
 ```
 
-### Implementing Your Agent
+Evaluate the first 20 utterances as a quick check:
 
-Create a class that conforms to the `Agent` protocol:
-
-```python
-from agent_harness.agent import Agent
-
-
-class MyAgent:
-    """A custom agent implementation."""
-
-    def run(self, task):
-        """Run the agent on a task and return the output."""
-        # Your agent logic here
-        return "agent output"
+```bash
+uv run run --limit 20
 ```
 
-### Implementing Your Task
+Metrics are logged to the console and to the `jev-snips` wandb project.
 
-Create a class that conforms to the `Task` protocol:
+## Output
+
+`results/test.jsonl` holds one record per utterance: the tokens and gold
+labels, the predicted intent and its probabilities, and for each scheme the
+predicted tags, the probabilities of every question's options, and the input
+tokens used. Records are `jevsnips.models.Prediction` objects:
 
 ```python
-from agent_harness.task import Task
+from pathlib import Path
 
+from jevsnips.models import Prediction
 
-class MyTask:
-    """A custom task implementation."""
-
-    @property
-    def id(self) -> str:
-        """Return the task identifier."""
-        return "my_task_001"
-
-    def evaluate(self, output) -> float:
-        """Evaluate agent output and return a score between 0 and 1."""
-        return 1.0 if output == "expected output" else 0.0
+lines = Path("results/test.jsonl").read_text().splitlines()
+predictions = [Prediction.model_validate_json(line) for line in lines]
 ```
 
-### Running an Evaluation
+## Project structure
 
-```python
-from agent_harness.config import HarnessConfig
-from agent_harness.harness import Harness
-
-config = HarnessConfig(max_workers=4, timeout=30.0)
-harness = Harness(config=config)
-
-agent = MyAgent()
-tasks = [MyTask()]
-
-results = harness.run(agent, tasks)
-for result in results:
-    print(f"Task {result.task_id}: score={result.score}")
+```
+src/jevsnips/
+├── config.py        # Constants: dataset, model, limits
+├── models.py        # Utterance, SlotPrediction, Prediction
+├── data.py          # Load utterances and the per-intent slot schema
+├── jev.py           # Build questions, call Jev, decode answers
+├── metrics.py       # Intent accuracy, slot F1, frame accuracy
+└── scripts/run.py   # Entry point
 ```
 
 ## Development
 
-### Running Tests
-
 ```bash
-uv run pytest
+uv run pre-commit run -a
 ```
 
-### Type Checking
+This formats, lints, type-checks, and runs the tests. The data tests download
+the dataset from the Hugging Face Hub.
 
-```bash
-uv run ty check src/
-```
+## Data
 
-### Linting and Formatting
-
-```bash
-uv run ruff check src/
-uv run ruff format src/
-```
-
-### Pre-commit Hooks
-
-Pre-commit hooks will automatically run on every commit to ensure code quality. To run manually:
-
-```bash
-uv run pre-commit run --all-files
-```
-
-## Configuration
-
-Edit `src/agent_harness/config.py` to customize harness settings:
-
-```python
-from pydantic import BaseModel
-
-
-class HarnessConfig(BaseModel):
-    max_workers: int = 1
-    timeout: float = 60.0
-    seed: int = 42
-    debug: bool = False
-```
-
-## Dependencies
-
-Core dependencies:
-
-- **Pydantic**: Data validation and configuration
-- **python-dotenv**: Environment variable management
-
-Development tools:
-
-- **ruff**: Fast Python linter and formatter
-- **ty**: Static type checker
-- **pytest**: Testing framework
-- **pre-commit**: Git hooks for code quality
-
-## Build System
-
-This project uses `uv_build` as the build backend. To build the project:
-
-```bash
-uv build
-```
+[`bkonkle/snips-joint-intent`](https://huggingface.co/datasets/bkonkle/snips-joint-intent),
+pinned to a fixed revision in `config.py`. SNIPS was introduced in
+[Coucke et al., 2018](https://arxiv.org/abs/1805.10190).
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-1. Create a new branch for your feature
-2. Make your changes
-3. Ensure all tests pass and pre-commit hooks succeed
-4. Submit a pull request
+See [LICENSE](LICENSE).
