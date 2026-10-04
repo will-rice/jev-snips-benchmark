@@ -59,13 +59,10 @@ def main() -> None:
             runs.append(
                 evaluate(predictions)
                 | {
-                    "intent/input_tokens": sum(
+                    "intent_input_tokens": sum(
                         p.intent_input_tokens for p in predictions
                     ),
-                    "token/input_tokens": sum(
-                        p.token.input_tokens for p in predictions
-                    ),
-                    "span/input_tokens": sum(p.span.input_tokens for p in predictions),
+                    "slot_input_tokens": sum(p.slots.input_tokens for p in predictions),
                 }
             )
 

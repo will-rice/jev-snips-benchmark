@@ -16,8 +16,9 @@ including the ones that are not in the benchmark code.
   per utterance.
 - **Model:** `jev-1.13.0`. Single runs; run-to-run noise is about half a
   point, so differences under one point are not meaningful.
-- Formulations marked **benchmark** are implemented in `src/jevsnips/` and
-  have test-set results in the README. The rest were throwaway scripts.
+- The **benchmark** runs formulation 6, token classification, and nothing
+  else. Everything else here was a throwaway script, except formulation 12,
+  which was a second benchmark method until it was removed.
 
 ## Results
 
@@ -85,13 +86,53 @@ plus `none`. Overlapping answers are resolved by probability.
 | 16  | Instructions as labelled fields (`intent`, `field`, `question`)    | 76.2        | 41%             | 5,359  |
 | 17  | As 12, asked only for slots a word-level question says are present | 75.3        | —               | ~4,000 |
 
-- **12** is the **benchmark** span scheme. Test: 48.3 with names, 72.2 with
-  descriptions.
+- **12** follows the docs' extraction cookbook (code supplies candidates,
+  Jev picks one or `none`). It was a second benchmark method and was
+  removed. Test, three runs: 48.3 slot F1 with names, 72.2 with
+  descriptions (frame accuracy 19.3 and 40.5), at 3.65M input tokens per
+  run against 2.11M for token classification.
 - Row 17 was estimated from saved answers by removing spans, without
   re-resolving overlaps, so it is a lower bound; its token figure is an
   estimate.
 - Wording for 12: `The intent is {intent}. Which span of the utterance is
 the {slot}? {description} Answer none if the utterance has no {slot}.`
+
+### The function-calling cookbook's pattern
+
+The docs' function-calling cookbook treats the intent as a function and each
+slot as an argument. Per slot it asks a `stated` yes/no ("does the user say
+anything about this?") and a value `Choice` whose question is written about
+the idea, not the parameter name. Its arguments are closed sets; here the
+options are the utterance's spans, with no `none`. A slot is filled when
+`stated` is at least 0.5; overlaps go to the higher of
+min(`stated`, value probability).
+
+| #   | Formulation                                         | Dev slot F1 | All slots right | Tokens |
+| --- | --------------------------------------------------- | ----------- | --------------- | ------ |
+| 26  | `stated` yes/no plus a plainly worded span question | 66.7        | 25%             | 4,970  |
+
+- Scored on the second half of the dev set, where formulation 12 scores
+  74.8 and formulation 6 scores 77.8.
+- Test, three runs with the benchmark's predicted intents: 66.9 slot F1
+  (66.4–67.2), 29.1 frame accuracy (28.3–29.6), 3.58M input tokens per run.
+- `stated` says yes for 13.9% of slot types the utterance does not use
+  (formulation 12 answers with a span instead of `none` for 27%), but says
+  no for 12.5% of the ones it does use (about 2% for formulation 12).
+- The 53 question pairs were written for this test and replaced the slot
+  descriptions, so the result reflects that wording as well as the pattern.
+- Example, `city` under `GetWeather`: value question "Which city or town
+  does the user want the weather for?", stated question "Does the user name
+  a city or town, as opposed to a state or a country?"
+
+### Combining two formulations
+
+| #   | Formulation                                                                          | Dev slot F1 | All slots right | Tokens |
+| --- | ------------------------------------------------------------------------------------ | ----------- | --------------- | ------ |
+| 27  | Labels from 6; where a span from 12 holds only that type's words, use its boundaries | 79.8        | 55%             | 8,097  |
+| 28  | As 27, with spans from 26 instead of 12                                              | 77.5        | 51%             | 7,983  |
+
+Scored on the second half of the dev set (formulation 6: 77.8). On the first
+half, 27 scores 78.9 against 76.2. The rule has no tuned parameters.
 
 ### One question per slot, options are words
 
@@ -169,7 +210,15 @@ word that points to the work without naming it, or the kind of work."}`
   about where it was and cost 47% more tokens (row 24). Telling Jev that
   every word of a title counts halved the missed title words but pulled
   more outside words into slots, for a net loss (row 25).
-- **The span scheme's errors are mostly sibling confusions.** Each slot is
+- **The docs' patterns ask per field, and that is their weakness here.**
+  Both cookbook patterns (rows 12 and 26) ask about each slot type on its
+  own. On the test set, token classification beats them by 4 and 10 points
+  of slot F1 at about 60% of the tokens.
+- **A `stated` gate trades false proposals for misses** and loses overall
+  (row 26).
+- **Two formulations together beat either alone** (row 27), at 2.7 times the
+  tokens of token classification. Not adopted.
+- **The span question's errors are mostly sibling confusions.** Each slot is
   asked separately, so `city` and `state` both claim "mt" and code picks a
   winner. On the test set it proposed a span for a slot the utterance does
   not have in 27% of such questions. Moving or describing `none` did not
@@ -178,10 +227,14 @@ word that points to the work without naming it, or the kind of work."}`
 ## Not tried
 
 - Chunk first (a yes/no per gap between words), then one `Choice` per chunk.
-- A yes/no presence gate per slot before the span question.
 - `what` / `not_for` rubrics on the span scheme, where sibling confusion is
   the main error. They were only tried on the token scheme.
 - `examples` in the option rubrics.
 - Example values from the training split in the descriptions (few-shot).
 - Using the top-k reading for confident slots and the span question for the
   rest.
+- Treating slots with a few fixed values (`rating_unit`, `object_select`,
+  `music_item`) as closed sets, as the function-calling cookbook does. It
+  needs value lists from the training split.
+- Extending a title across small words in the decoder when `none` only
+  narrowly won, using the saved per-word probabilities.

@@ -1,10 +1,10 @@
-"""Ask Jev for an utterance's intent and slots, and decode its answers."""
+"""Ask Jev for an utterance's intent and each word's slot, and decode them."""
 
 from collections.abc import Mapping, Sequence
 
-from typesafe_sdk import Choice, ChoiceAnswer, SystemOneResponse, TypeSafeClient
+from typesafe_sdk import Choice, SystemOneResponse, TypeSafeClient
 
-from jevsnips.config import MAX_GAP, MAX_OPTIONS, MODEL, NONE
+from jevsnips.config import MAX_GAP, MODEL, NONE
 from jevsnips.descriptions import (
     INTENT_DESCRIPTIONS,
     NONE_DESCRIPTION,
@@ -19,12 +19,11 @@ def predict(
     schema: Mapping[str, Sequence[str]],
     condition: Condition,
 ) -> Prediction:
-    """Predict the intent, then the slots under both schemes.
+    """Predict the intent, then classify each word into one of its slots.
 
-    Both slot schemes are conditioned on the predicted intent, so they
-    differ only in how slots are asked and decoded. Under the descriptions
-    condition every intent and slot is offered with its definition; under
-    names the model sees label names only.
+    Slots are conditioned on the predicted intent, never the gold one. Under
+    the descriptions condition every intent and slot is offered with its
+    definition; under names the model sees label names only.
 
     Args:
         client: An open TypeSafe client.
@@ -33,8 +32,8 @@ def predict(
         condition: Whether labels are offered with descriptions.
 
     Returns:
-        The predicted intent and each scheme's tags, probabilities, and
-        token usage.
+        The predicted intent and the slot tags, probabilities, and token
+        usage.
     """
     tokens = utterance.tokens
     state = " ".join(tokens)
@@ -51,15 +50,12 @@ def predict(
         for slot in schema[intent.choice]
     }
 
-    token_response = client.system_one(
+    slot_response = client.system_one(
         {"utterance": state},
         token_questions(
             tokens, intent.choice, slots, NONE_DESCRIPTION if described else None
         ),
         model=MODEL,
-    )
-    span_response = client.system_one(
-        state, span_questions(tokens, intent.choice, slots), model=MODEL
     )
     return Prediction(
         utterance=utterance,
@@ -67,26 +63,18 @@ def predict(
         intent=intent.choice,
         intent_probabilities=intent.probabilities,
         intent_input_tokens=input_tokens(intent_response),
-        token=SlotPrediction(
+        slots=SlotPrediction(
             tags=decode_tokens(
                 [
-                    token_response.choices[f"token_{index}"].choice
+                    slot_response.choices[f"token_{index}"].choice
                     for index in range(len(tokens))
                 ]
             ),
             probabilities={
                 name: answer.probabilities
-                for name, answer in token_response.choices.items()
+                for name, answer in slot_response.choices.items()
             },
-            input_tokens=input_tokens(token_response),
-        ),
-        span=SlotPrediction(
-            tags=decode_spans(tokens, span_response.choices),
-            probabilities={
-                name: answer.probabilities
-                for name, answer in span_response.choices.items()
-            },
-            input_tokens=input_tokens(span_response),
+            input_tokens=input_tokens(slot_response),
         ),
         model=intent_response.model,
     )
@@ -140,53 +128,6 @@ def token_questions(
     }
 
 
-def span_questions(
-    tokens: Sequence[str], intent: str, slots: Mapping[str, str | None]
-) -> dict[str, Choice]:
-    """Build one question per slot type asking which span fills it.
-
-    The options are spans, so a slot's description, if any, goes in the
-    instructions.
-    """
-    criteria = dict.fromkeys([*span_candidates(tokens), NONE])
-    return {
-        slot: Choice(
-            instructions=(
-                f"The intent is {intent}. Which span of the utterance is the "
-                f"{slot}? {f'{description} ' if description else ''}"
-                f"Answer {NONE} if the utterance has no {slot}."
-            ),
-            criteria=criteria,
-        )
-        for slot, description in slots.items()
-    }
-
-
-def span_candidates(tokens: Sequence[str]) -> dict[str, tuple[int, int]]:
-    """Map each candidate span's text to its first (start, end) position.
-
-    Span length is capped at the largest length whose spans, plus the none
-    option, fit in one Choice.
-
-    Raises:
-        ValueError: If a token equals the none option.
-    """
-    if NONE in tokens:
-        raise ValueError(f"Token '{NONE}' collides with the none option")
-    max_length = len(tokens)
-    while (
-        sum(len(tokens) - length + 1 for length in range(1, max_length + 1)) + 1
-        > MAX_OPTIONS
-    ):
-        max_length -= 1
-    candidates: dict[str, tuple[int, int]] = {}
-    for length in range(1, max_length + 1):
-        for start in range(len(tokens) - length + 1):
-            end = start + length
-            candidates.setdefault(" ".join(tokens[start:end]), (start, end))
-    return candidates
-
-
 def decode_tokens(choices: Sequence[str]) -> tuple[str, ...]:
     """Convert per-token slot types to BIO tags, merging equal neighbours.
 
@@ -211,31 +152,6 @@ def decode_tokens(choices: Sequence[str]) -> tuple[str, ...]:
         else:
             tags.append(f"{'I' if choice == previous else 'B'}-{choice}")
         previous = choice
-    return tuple(tags)
-
-
-def decode_spans(
-    tokens: Sequence[str], answers: Mapping[str, ChoiceAnswer]
-) -> tuple[str, ...]:
-    """Convert per-slot span choices to BIO tags.
-
-    Proposals are accepted from most to least probable; one that overlaps
-    an accepted span is dropped.
-    """
-    candidates = span_candidates(tokens)
-    proposals = sorted(
-        (
-            (answer.probabilities[answer.choice], slot, answer.choice)
-            for slot, answer in answers.items()
-            if answer.choice != NONE
-        ),
-        reverse=True,
-    )
-    tags = ["O"] * len(tokens)
-    for _, slot, text in proposals:
-        start, end = candidates[text]
-        if all(tag == "O" for tag in tags[start:end]):
-            tags[start:end] = [f"B-{slot}", *[f"I-{slot}"] * (end - start - 1)]
     return tuple(tags)
 
 

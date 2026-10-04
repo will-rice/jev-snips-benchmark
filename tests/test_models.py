@@ -16,16 +16,14 @@ def test_prediction_rejects_tags_of_the_wrong_length() -> None:
     """A scheme's tags must cover every token of the utterance."""
     utterance = Utterance(tokens=("play", "music"), intent="PlayMusic", tags=("O", "O"))
     short = SlotPrediction(tags=("O",), probabilities={}, input_tokens=1)
-    full = SlotPrediction(tags=("O", "O"), probabilities={}, input_tokens=1)
-    with pytest.raises(ValidationError, match="span has 1 tags for 2 tokens"):
+    with pytest.raises(ValidationError, match="1 slot tags for 2 tokens"):
         Prediction(
             utterance=utterance,
             condition="names",
             intent="PlayMusic",
             intent_probabilities={"PlayMusic": 1.0},
             intent_input_tokens=1,
-            token=full,
-            span=short,
+            slots=short,
             model="jev-1.13.0",
         )
 
@@ -40,15 +38,10 @@ def test_prediction_survives_a_json_round_trip() -> None:
         intent="PlayMusic",
         intent_probabilities={"PlayMusic": 0.9, "RateBook": 0.1},
         intent_input_tokens=300,
-        token=SlotPrediction(
+        slots=SlotPrediction(
             tags=("O", "B-artist"),
             probabilities={"token_0": {"artist": 0.1, "none": 0.9}},
             input_tokens=500,
-        ),
-        span=SlotPrediction(
-            tags=("O", "B-artist"),
-            probabilities={"artist": {"abba": 0.8, "none": 0.2}},
-            input_tokens=700,
         ),
         model="jev-1.13.0",
     )
@@ -65,8 +58,7 @@ def test_prediction_parse_is_a_snips_style_result() -> None:
         intent="GetWeather",
         intent_probabilities={"GetWeather": 0.95, "PlayMusic": 0.05},
         intent_input_tokens=1,
-        token=SlotPrediction(tags=tags, probabilities={}, input_tokens=1),
-        span=SlotPrediction(tags=("O",) * 5, probabilities={}, input_tokens=1),
+        slots=SlotPrediction(tags=tags, probabilities={}, input_tokens=1),
         model="jev-1.13.0",
     )
     assert prediction.model_dump(mode="json", by_alias=True)["parse"] == {

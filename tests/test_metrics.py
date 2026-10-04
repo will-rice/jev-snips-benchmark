@@ -6,12 +6,7 @@ from jevsnips.metrics import evaluate, summarize
 from jevsnips.models import Prediction, SlotPrediction, Utterance
 
 
-def prediction(
-    utterance: Utterance,
-    intent: str,
-    token_tags: tuple[str, ...],
-    span_tags: tuple[str, ...],
-) -> Prediction:
+def prediction(utterance: Utterance, intent: str, tags: tuple[str, ...]) -> Prediction:
     """Build a prediction with only the fields metrics read."""
     return Prediction(
         utterance=utterance,
@@ -19,13 +14,12 @@ def prediction(
         intent=intent,
         intent_probabilities={intent: 1.0},
         intent_input_tokens=1,
-        token=SlotPrediction(tags=token_tags, probabilities={}, input_tokens=1),
-        span=SlotPrediction(tags=span_tags, probabilities={}, input_tokens=1),
+        slots=SlotPrediction(tags=tags, probabilities={}, input_tokens=1),
         model="jev-1.13.0",
     )
 
 
-def test_evaluate_scores_intent_slots_and_frames_per_scheme() -> None:
+def test_evaluate_scores_intent_slots_and_frames() -> None:
     """Four gold spans over two utterances give hand-computed scores."""
     play = Utterance(
         tokens=("play", "sabrina", "salerno"),
@@ -39,20 +33,24 @@ def test_evaluate_scores_intent_slots_and_frames_per_scheme() -> None:
     )
     metrics = evaluate(
         [
-            prediction(play, "PlayMusic", play.tags, ("O", "B-artist", "O")),
-            prediction(
-                rate, "SearchCreativeWork", ("O", "O", "B-object_type", "O"), rate.tags
-            ),
+            prediction(play, "PlayMusic", play.tags),
+            prediction(rate, "SearchCreativeWork", ("O", "O", "B-object_type", "O")),
         ]
     )
     assert metrics["intent_accuracy"] == 0.5
-    # Token: 2 predicted spans, both correct, of 4 gold: P=1, R=0.5.
-    assert metrics["token/slot_f1"] == pytest.approx(2 / 3)
-    assert metrics["token/frame_accuracy"] == 0.5
-    # Span: 4 predicted spans, 3 correct, of 4 gold: P=R=0.75.
-    assert metrics["span/slot_f1"] == pytest.approx(0.75)
-    # The exact span tags belong to the utterance with the wrong intent.
-    assert metrics["span/frame_accuracy"] == 0.0
+    # 2 predicted spans, both correct, of 4 gold: P=1, R=0.5.
+    assert metrics["slot_f1"] == pytest.approx(2 / 3)
+    assert metrics["frame_accuracy"] == 0.5
+
+
+def test_a_frame_needs_the_right_intent_as_well_as_the_right_tags() -> None:
+    """Exact tags with the wrong intent are not a correct frame."""
+    rate = Utterance(
+        tokens=("rate", "this"), intent="RateBook", tags=("O", "B-object_select")
+    )
+    metrics = evaluate([prediction(rate, "SearchCreativeWork", rate.tags)])
+    assert metrics["slot_f1"] == 1.0
+    assert metrics["frame_accuracy"] == 0.0
 
 
 def test_evaluate_rejects_an_empty_run() -> None:

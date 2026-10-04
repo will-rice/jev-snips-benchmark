@@ -25,7 +25,7 @@ class Utterance(BaseModel, frozen=True):
 
 
 class SlotPrediction(BaseModel, frozen=True):
-    """One slot scheme's result for one utterance."""
+    """The slot tags predicted for one utterance."""
 
     tags: tuple[str, ...]
     probabilities: dict[str, dict[str, float]]
@@ -70,14 +70,13 @@ class Prediction(BaseModel, frozen=True):
     intent: str
     intent_probabilities: dict[str, float]
     intent_input_tokens: int
-    token: SlotPrediction
-    span: SlotPrediction
+    slots: SlotPrediction
     model: str
 
     @computed_field
     @property
     def parse(self) -> Parse:
-        """The predicted intent and the token scheme's slots as a parse."""
+        """The predicted intent and slots as a Snips-style parse."""
         return Parse(
             intent=ParsedIntent(
                 intent_name=self.intent,
@@ -89,17 +88,16 @@ class Prediction(BaseModel, frozen=True):
                     entity=slot,
                     slot_name=slot,
                 )
-                for slot, start, end in get_entities(list(self.token.tags))
+                for slot, start, end in get_entities(list(self.slots.tags))
             ),
         )
 
     @model_validator(mode="after")
     def check_tag_lengths(self) -> Self:
-        """Reject a scheme whose tags do not cover every token."""
-        for scheme, slots in (("token", self.token), ("span", self.span)):
-            if len(slots.tags) != len(self.utterance.tokens):
-                raise ValueError(
-                    f"{scheme} has {len(slots.tags)} tags "
-                    f"for {len(self.utterance.tokens)} tokens"
-                )
+        """Reject slot tags that do not cover every token."""
+        if len(self.slots.tags) != len(self.utterance.tokens):
+            raise ValueError(
+                f"{len(self.slots.tags)} slot tags "
+                f"for {len(self.utterance.tokens)} tokens"
+            )
         return self
