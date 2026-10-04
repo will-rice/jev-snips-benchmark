@@ -39,3 +39,4 @@ convention = "google"
 
 [project.scripts]
 run = "jevsnips.scripts.run:main"
+report = "jevsnips.scripts.report:main"

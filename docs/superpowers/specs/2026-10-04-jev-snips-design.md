@@ -190,6 +190,20 @@ A token equal to the `none` option would collide with it in the span scheme.
 No test utterance contains one, and building span options for such an
 utterance raises.
 
+## Label descriptions ablation
+
+Added after the first results. A `condition` argument selects `names` (the
+design above) or `descriptions`, in which every intent and slot carries a
+one-sentence definition from `descriptions.py`, keyed by intent and slot.
+The token scheme passes it as the option's description; the span scheme adds
+it to the question. Definitions were written from label names and the train
+split only and contain no example values.
+
+Jev's slot answers vary between runs, so each condition runs `RUNS = 3`
+times, saved as `results/{split}-{condition}-run{n}.jsonl`. `report` compares
+the conditions: mean and range per metric, the same on utterances where
+every condition got the intent right, and slot F1 per slot type.
+
 ## Documentation
 
 `README.md` is rewritten for this project: what is measured, the results

@@ -5,23 +5,28 @@ from collections.abc import Mapping, Sequence
 from typesafe_sdk import Choice, ChoiceAnswer, SystemOneResponse, TypeSafeClient
 
 from jevsnips.config import MAX_OPTIONS, MODEL, NONE
-from jevsnips.models import Prediction, SlotPrediction, Utterance
+from jevsnips.descriptions import INTENT_DESCRIPTIONS, SLOT_DESCRIPTIONS
+from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
 
 
 def predict(
     client: TypeSafeClient,
     utterance: Utterance,
     schema: Mapping[str, Sequence[str]],
+    condition: Condition,
 ) -> Prediction:
     """Predict the intent, then the slots under both schemes.
 
     Both slot schemes are conditioned on the predicted intent, so they
-    differ only in how slots are asked and decoded.
+    differ only in how slots are asked and decoded. Under the descriptions
+    condition every intent and slot is offered with its definition; under
+    names the model sees label names only.
 
     Args:
         client: An open TypeSafe client.
         utterance: The utterance to label.
         schema: Each intent's slot types.
+        condition: Whether labels are offered with descriptions.
 
     Returns:
         The predicted intent and each scheme's tags, probabilities, and
@@ -29,11 +34,18 @@ def predict(
     """
     tokens = utterance.tokens
     state = " ".join(tokens)
+    described = condition == "descriptions"
+    intents = {
+        name: INTENT_DESCRIPTIONS[name] if described else None for name in schema
+    }
     intent_response = client.system_one(
-        state, {"intent": intent_question(list(schema))}, model=MODEL
+        state, {"intent": intent_question(intents)}, model=MODEL
     )
     intent = intent_response.choices["intent"]
-    slots = schema[intent.choice]
+    slots = {
+        slot: SLOT_DESCRIPTIONS[intent.choice][slot] if described else None
+        for slot in schema[intent.choice]
+    }
 
     token_response = client.system_one(
         state, token_questions(tokens, intent.choice, slots), model=MODEL
@@ -43,6 +55,7 @@ def predict(
     )
     return Prediction(
         utterance=utterance,
+        condition=condition,
         intent=intent.choice,
         intent_probabilities=intent.probabilities,
         intent_input_tokens=input_tokens(intent_response),
@@ -71,23 +84,28 @@ def predict(
     )
 
 
-def intent_question(intents: Sequence[str]) -> Choice:
-    """Build the question that picks one intent by name."""
+def intent_question(intents: Mapping[str, str | None]) -> Choice:
+    """Build the question that picks one intent.
+
+    Args:
+        intents: Each intent name with its description, or None for name only.
+    """
     return Choice(
         instructions="What is the intent of the utterance?",
-        criteria=dict.fromkeys(intents),
+        criteria=dict(intents),
     )
 
 
 def token_questions(
-    tokens: Sequence[str], intent: str, slots: Sequence[str]
+    tokens: Sequence[str], intent: str, slots: Mapping[str, str | None]
 ) -> dict[str, Choice]:
     """Build one question per token asking which slot type it fills.
 
     The token is bracketed inside the utterance so a repeated word is
-    identified by position.
+    identified by position. A slot's description, if any, is its option's
+    criteria.
     """
-    criteria = dict.fromkeys([*slots, NONE])
+    criteria = {**slots, NONE: None}
     questions = {}
     for index, token in enumerate(tokens):
         marked = " ".join([*tokens[:index], f"[{token}]", *tokens[index + 1 :]])
@@ -102,19 +120,24 @@ def token_questions(
 
 
 def span_questions(
-    tokens: Sequence[str], intent: str, slots: Sequence[str]
+    tokens: Sequence[str], intent: str, slots: Mapping[str, str | None]
 ) -> dict[str, Choice]:
-    """Build one question per slot type asking which span fills it."""
+    """Build one question per slot type asking which span fills it.
+
+    The options are spans, so a slot's description, if any, goes in the
+    instructions.
+    """
     criteria = dict.fromkeys([*span_candidates(tokens), NONE])
     return {
         slot: Choice(
             instructions=(
                 f"The intent is {intent}. Which span of the utterance is the "
-                f"{slot}? Answer {NONE} if the utterance has no {slot}."
+                f"{slot}? {f'{description} ' if description else ''}"
+                f"Answer {NONE} if the utterance has no {slot}."
             ),
             criteria=criteria,
         )
-        for slot in slots
+        for slot, description in slots.items()
     }
 
 

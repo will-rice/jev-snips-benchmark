@@ -2,7 +2,7 @@
 
 import pytest
 
-from jevsnips.metrics import evaluate
+from jevsnips.metrics import evaluate, summarize
 from jevsnips.models import Prediction, SlotPrediction, Utterance
 
 
@@ -15,6 +15,7 @@ def prediction(
     """Build a prediction with only the fields metrics read."""
     return Prediction(
         utterance=utterance,
+        condition="names",
         intent=intent,
         intent_probabilities={intent: 1.0},
         intent_input_tokens=1,
@@ -58,3 +59,11 @@ def test_evaluate_rejects_an_empty_run() -> None:
     """Scoring nothing is an error, not a division by zero."""
     with pytest.raises(ValueError, match="No predictions"):
         evaluate([])
+
+
+def test_summarize_gives_mean_and_range_per_metric() -> None:
+    """Repeated runs reduce to mean, minimum, and maximum."""
+    runs = [{"slot_f1": 0.4}, {"slot_f1": 0.5}, {"slot_f1": 0.6}]
+    mean, low, high = summarize(runs)["slot_f1"]
+    assert mean == pytest.approx(0.5)
+    assert (low, high) == (0.4, 0.6)

@@ -16,21 +16,32 @@ from jevsnips.jev import (
 
 def test_intent_question_offers_each_intent_without_descriptions() -> None:
     """The intent question is zero-shot: names only."""
-    question = intent_question(["PlayMusic", "RateBook"])
+    question = intent_question({"PlayMusic": None, "RateBook": None})
     assert question.criteria == {"PlayMusic": None, "RateBook": None}
+
+
+def test_intent_question_carries_descriptions_when_given() -> None:
+    """A described intent passes its description as the option's criteria."""
+    question = intent_question({"PlayMusic": "Play music."})
+    assert question.criteria == {"PlayMusic": "Play music."}
 
 
 def test_token_questions_offer_the_intents_slots_plus_none() -> None:
     """Each token gets one question over the given slots and none."""
-    questions = token_questions(("play", "abba"), "PlayMusic", ["artist", "track"])
+    slots = {"artist": None, "track": None}
+    questions = token_questions(("play", "abba"), "PlayMusic", slots)
     assert list(questions) == ["token_0", "token_1"]
-    assert list(questions["token_0"].criteria) == ["artist", "track", "none"]
+    assert questions["token_0"].criteria == {
+        "artist": None,
+        "track": None,
+        "none": None,
+    }
     assert "PlayMusic" in str(questions["token_0"].instructions)
 
 
 def test_token_questions_mark_the_position_of_a_repeated_word() -> None:
     """A repeated word is disambiguated by bracketing one occurrence."""
-    questions = token_questions(("play", "the", "the"), "PlayMusic", ["artist"])
+    questions = token_questions(("play", "the", "the"), "PlayMusic", {"artist": None})
     assert '"play [the] the"' in str(questions["token_1"].instructions)
     assert '"play the [the]"' in str(questions["token_2"].instructions)
 
@@ -69,10 +80,34 @@ def test_span_candidates_reject_a_token_equal_to_the_none_option() -> None:
 
 def test_span_questions_ask_once_per_slot_over_spans_plus_none() -> None:
     """Each slot type gets one question whose options are spans."""
-    questions = span_questions(("play", "abba"), "PlayMusic", ["artist", "track"])
+    slots = {"artist": None, "track": None}
+    questions = span_questions(("play", "abba"), "PlayMusic", slots)
     assert list(questions) == ["artist", "track"]
     assert list(questions["artist"].criteria) == ["play", "abba", "play abba", "none"]
-    assert "artist" in str(questions["artist"].instructions)
+    assert questions["artist"].instructions == (
+        "The intent is PlayMusic. Which span of the utterance is the artist? "
+        "Answer none if the utterance has no artist."
+    )
+
+
+def test_token_questions_carry_slot_descriptions_when_given() -> None:
+    """A described slot passes its description as the option's criteria."""
+    slots = {"artist": "The musician or band."}
+    questions = token_questions(("play", "abba"), "PlayMusic", slots)
+    assert questions["token_1"].criteria == {
+        "artist": "The musician or band.",
+        "none": None,
+    }
+
+
+def test_span_questions_put_the_slot_description_in_the_instructions() -> None:
+    """Span options are spans, so the description goes in the question."""
+    slots = {"artist": "The musician or band."}
+    questions = span_questions(("play", "abba"), "PlayMusic", slots)
+    assert questions["artist"].instructions == (
+        "The intent is PlayMusic. Which span of the utterance is the artist? "
+        "The musician or band. Answer none if the utterance has no artist."
+    )
 
 
 def test_decode_tokens_merges_adjacent_equal_types() -> None:

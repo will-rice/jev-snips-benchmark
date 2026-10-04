@@ -7,58 +7,86 @@ benchmark: intent detection and slot filling.
 Jev does not generate text. It takes some state and a set of typed questions
 and returns typed answers with probabilities. This project asks how far that
 gets on a task normally solved by a trained tagger, without showing the model
-a single labelled example.
+a single labelled example, and how much one-sentence label descriptions help.
 
 ## Results
 
-SNIPS test set, 700 utterances, model `jev-1.13.0`, zero-shot.
+SNIPS test set, 700 utterances, model `jev-1.13.0`. Mean of three runs per
+condition, with the range across runs in brackets.
 
-| Metric                  | Token scheme | Span scheme |
-| ----------------------- | ------------ | ----------- |
-| Intent accuracy         | 94.3%        | 94.3%       |
-| Slot F1                 | 25.5%        | 48.9%       |
-| Semantic-frame accuracy | 0.9%         | 19.3%       |
-| Input tokens            | 926,053      | 3,614,597   |
+| Condition    | Scheme | Intent accuracy  | Slot F1          | Frame accuracy   |
+| ------------ | ------ | ---------------- | ---------------- | ---------------- |
+| Names        | Token  | 94.3 (94.3–94.3) | 26.0 (25.9–26.2) | 0.9 (0.7–1.0)    |
+| Names        | Span   | 94.3 (94.3–94.3) | 48.2 (47.7–48.8) | 19.2 (18.4–20.1) |
+| Descriptions | Token  | 94.9 (94.9–95.0) | 32.1 (31.7–32.4) | 2.0 (2.0–2.0)    |
+| Descriptions | Span   | 94.9 (94.9–95.0) | 72.3 (72.1–72.5) | 40.7 (40.4–41.0) |
 
-Intent accuracy is shared: both schemes use the same predicted intent, which
-took a further 252,703 input tokens.
+Intent accuracy is shared by both schemes within a condition: they use the
+same predicted intent.
 
-These numbers are from the run saved in `results/test.jsonl`. Jev's slot
-answers are not identical between runs: an earlier full run gave the same
-intent accuracy and token counts, but 26.0% and 49.1% slot F1 and 0.9% and
-20.6% frame accuracy for the token and span schemes. Treat differences below
-about one point as noise.
+What the numbers say:
 
-Supervised models trained on the 13,084 SNIPS training utterances reach
-roughly 98–99% intent accuracy and 96–97% slot F1; nothing here is trained.
-Zero-shot intent detection from intent names alone is close to that. Slot
-filling from slot names alone is not: letting the model choose a whole span
-nearly doubles slot F1 over labelling words independently, but both remain
-far below a trained tagger.
+- **Intent detection needs almost nothing.** Names alone give 94.3%, and
+  descriptions add about half a point. Supervised models trained on the
+  13,084 SNIPS training utterances reach roughly 98–99%.
+- **Asking for a span beats labelling words.** The span scheme scores about
+  double the token scheme in both conditions. Labelling each word
+  independently pulls neighbouring function words into slots and breaks span
+  boundaries.
+- **One-sentence descriptions are worth 24 points of slot F1** in the span
+  scheme (48.2 to 72.3) and double frame accuracy. The gain is largest on
+  slots whose names say little: `best_rating` (16 to 95), `geographic_poi`
+  (30 to 96), `object_location_type` (36 to 98), `state` (13 to 75).
+- **The gain is in the slots, not the intent.** On the utterances where both
+  conditions got the intent right, span slot F1 goes from 49.7 to 74.5.
+- **It is still well short of a trained tagger** (roughly 96–97% slot F1).
+  `object_select` scores 0 in the span scheme under both conditions, and
+  `playlist`, `track`, and `current_location` stay below 45.
+
+Jev's slot answers are not identical between runs, which is why each
+condition is run three times. The ranges above are under one point, so the
+differences between rows are far outside the noise.
+
+Input tokens per run:
+
+| Condition    | Intent  | Token scheme | Span scheme |
+| ------------ | ------- | ------------ | ----------- |
+| Names        | 252,703 | 925,789      | 3,612,495   |
+| Descriptions | 336,703 | 1,715,101    | 3,659,296   |
 
 ## Method
 
 Each utterance gets three requests, all with the utterance as state.
 
-1. **Intent.** One `Choice` over the 7 intent names.
+1. **Intent.** One `Choice` over the 7 intents.
 2. **Token scheme.** One `Choice` per word, asking which slot type the
    bracketed word fills (`add sabrina [salerno] to the ...`). Adjacent words
    with the same type are merged into one span.
 3. **Span scheme.** One `Choice` per slot type, asking which span of the
    utterance fills it. The options are the utterance's contiguous word spans.
    When two slot types pick overlapping spans, the more probable one is kept.
-   The API reports probabilities to two decimals, so ties occur (65 of the
-   700 test utterances) and are broken by slot name; other tie orders move
-   span slot F1 by about half a point.
+   The API reports probabilities to two decimals, so ties are common and are
+   broken by slot name.
 
 Both slot schemes offer only the slot types of the **predicted** intent, the
 way an assistant's schema restricts which slots an intent accepts. The gold
-intent is never used, so an intent error costs the slots as well.
+intent is never used, so an intent error costs the slots as well. The mapping
+from intent to slot types is read from the training split's labels; no
+training utterance is sent to the model.
 
-The condition is strictly zero-shot: the model sees intent names, slot names,
-and span texts, with no descriptions and no examples. The mapping from intent
-to slot types is read from the training split's labels; no training utterance
-is sent to the model.
+### Conditions
+
+- **Names.** The model sees intent names, slot names, and span texts only.
+- **Descriptions.** Every intent and slot also carries a one-sentence
+  definition from `descriptions.py`. In the token scheme it is the option's
+  description; in the span scheme, where the options are spans, it is added
+  to the question. Slots are described per intent, because one slot name can
+  mean different things (`object_type` is a kind of book under `RateBook` and
+  a showtime listing under `SearchScreeningEvent`).
+
+Both conditions are zero-shot. The descriptions were written from the label
+names and the training split only, before any description run on the test
+set, and they contain no example values.
 
 ### Metrics
 
@@ -95,34 +123,44 @@ Add your `TYPESAFE_API_KEY` to `.env`.
 
 ## Usage
 
-Evaluate the full test set:
+Run a condition three times on the full test set:
 
 ```bash
-uv run run
+uv run run names
 ```
-
-Evaluate the first 20 utterances as a quick check:
 
 ```bash
-uv run run --limit 20
+uv run run descriptions
 ```
 
-Metrics are logged to the console. A limited run writes to `results/test-first20.jsonl`, leaving the full run's
-`results/test.jsonl` in place.
+Compare the saved runs, overall and per slot type:
+
+```bash
+uv run report
+```
+
+Check the pipeline on the first 20 utterances:
+
+```bash
+uv run run names --limit 20
+```
+
+A limited run writes to its own files and leaves the full results in place.
 
 ## Output
 
-`results/test.jsonl` is committed and holds one record per utterance: the tokens and gold
-labels, the predicted intent and its probabilities, and for each scheme the
-predicted tags, the probabilities of every question's options, and the input
-tokens used. Records are `jevsnips.models.Prediction` objects:
+Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
+per utterance: the tokens and gold labels, the condition, the predicted
+intent and its probabilities, and for each scheme the predicted tags, the
+probabilities of every question's options, and the input tokens used. Records
+are `jevsnips.models.Prediction` objects:
 
 ```python
 from pathlib import Path
 
 from jevsnips.models import Prediction
 
-lines = Path("results/test.jsonl").read_text().splitlines()
+lines = Path("results/test-descriptions-run1.jsonl").read_text().splitlines()
 predictions = [Prediction.model_validate_json(line) for line in lines]
 ```
 
@@ -133,9 +171,12 @@ src/jevsnips/
 ├── config.py        # Constants: dataset, model, limits
 ├── models.py        # Utterance, SlotPrediction, Prediction
 ├── data.py          # Load utterances and the per-intent slot schema
+├── descriptions.py  # One-sentence definitions of intents and slots
 ├── jev.py           # Build questions, call Jev, decode answers
 ├── metrics.py       # Intent accuracy, slot F1, frame accuracy
-└── scripts/run.py   # Entry point
+└── scripts/
+    ├── run.py       # Run one condition
+    └── report.py    # Compare the saved runs
 ```
 
 ## Development

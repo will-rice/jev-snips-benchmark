@@ -1,8 +1,10 @@
 """Pydantic models for parsed data and saved predictions."""
 
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, model_validator
+
+Condition = Literal["names", "descriptions"]
 
 
 class Utterance(BaseModel, frozen=True):
@@ -32,6 +34,7 @@ class Prediction(BaseModel, frozen=True):
     """The saved record for one utterance."""
 
     utterance: Utterance
+    condition: Condition
     intent: str
     intent_probabilities: dict[str, float]
     intent_input_tokens: int

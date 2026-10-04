@@ -8,6 +8,7 @@ SPLIT = "test"
 SCHEMA_SPLIT = "train"
 MODEL = "jev-latest"
 MAX_WORKERS = 8
+RUNS = 3
 MAX_OPTIONS = 255
 NONE = "none"
 RESULTS_DIR = Path("results")

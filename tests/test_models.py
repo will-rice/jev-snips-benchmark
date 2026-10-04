@@ -20,6 +20,7 @@ def test_prediction_rejects_tags_of_the_wrong_length() -> None:
     with pytest.raises(ValidationError, match="span has 1 tags for 2 tokens"):
         Prediction(
             utterance=utterance,
+            condition="names",
             intent="PlayMusic",
             intent_probabilities={"PlayMusic": 1.0},
             intent_input_tokens=1,
@@ -35,6 +36,7 @@ def test_prediction_survives_a_json_round_trip() -> None:
         utterance=Utterance(
             tokens=("play", "abba"), intent="PlayMusic", tags=("O", "B-artist")
         ),
+        condition="descriptions",
         intent="PlayMusic",
         intent_probabilities={"PlayMusic": 0.9, "RateBook": 0.1},
         intent_input_tokens=300,
