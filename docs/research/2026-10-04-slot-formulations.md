@@ -265,8 +265,16 @@ dev halves.
   neighbours are closer than a test utterance's.
 - On dev the nearest example has a mean cosine of 0.51 with the utterance,
   and 4% of utterances have one at 0.8 or above, so this is not copying from
-  near-duplicates. Row 51 confirms it: label copying from the same examples
-  is 17 points behind.
+  exact near-duplicates. Row 51 confirms it: label copying from the same
+  examples is 17.5 points behind.
+- SNIPS utterances are templated, though. On test, 84 of the 700 utterances
+  (12%) retrieve at least one example exactly one word away ("what movies
+  are playing at mann theatres" against "... amc theatres"), and most of
+  those examples have the same tag sequence. The top-1 cosine on test has
+  mean 0.50, with 4.4% at 0.8 or above and none at 1.0.
+- The pool keeps the training split's repeated utterances (186 repeated
+  texts), so 18% of test utterances are shown the same example twice among
+  their 8. Removing repeats would change the condition and was not run.
 - Descriptions add about half a point once examples are shown (46 against
   49, 41 against 50), which is within the noise on the dev set.
 - Eight examples are enough. More than eight does not help, and with

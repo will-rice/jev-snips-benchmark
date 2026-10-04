@@ -46,9 +46,11 @@ What the numbers say:
   tokens.** Showing the 8 training utterances most like the one being
   labelled scores 86.2 slot F1 against 83.5 for 32 fixed ones, and gets 68%
   of utterances entirely right against 62%. It draws on all 13,019 usable
-  training utterances, though, where few-shot uses 224. Jev is doing more
-  than looking labels up: copying each word's label from the same 8
-  examples scores 72 on the dev set, where Jev with them scores 89.5.
+  training utterances, though, where few-shot uses 224. SNIPS utterances
+  are templated, so 12% of test utterances retrieve an example that differs
+  from them by one word. Jev is still doing more than looking labels up:
+  copying each word's label from the same 8 examples scores 72 on the dev
+  set, where Jev with them scores 89.5.
 - **Examples must have the shape of the question.** The same 32 utterances
   shown as whole slot values ("album: the best of") scored 79.7: Jev left
   the first word of a phrase out of its slot more often ("movie" in "movie
@@ -362,7 +364,7 @@ predictions = [Prediction.model_validate_json(line) for line in lines]
 src/jevsnips/
 ├── config.py        # Constants: dataset, model, limits
 ├── models.py        # Utterance, SlotPrediction, Prediction, Parse
-├── data.py          # Load utterances, the slot schema, few-shot examples
+├── data.py          # Load utterances, the slot schema, and examples
 ├── descriptions.py  # One-sentence definitions of intents and slots
 ├── retrieval.py     # Choose examples by similarity to the utterance
 ├── jev.py           # Build questions, call Jev, decode answers
