@@ -54,7 +54,7 @@ What the numbers say:
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
   With few-shot, the weakest slots are titles and names that only context
   can tell apart: `album` (30), `track` (43), `entity_name` (47),
-  `movie_name` (50), `cuisine` (52), `genre` (56), `object_name` (56).
+  `movie_name` (50), `cuisine` (52), `object_name` (56), `genre` (56).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -229,9 +229,11 @@ What we learned:
   but misses 12% of the slots that are there, for a net loss.
 - Borrowing the span question's boundaries adds two points on the dev set,
   for 2.7 times the tokens. It is not in the benchmark.
-- Labelled examples help, and whole utterances in the state are the cheap
-  way to give them: example values on every option cost about twice the
-  tokens for the same gain.
+- Labelled examples help. Utterances in the state, listed with their slot
+  values, are the cheap way to give them: example values on every option
+  cost about twice the tokens for the same gain. Labelling every word costs
+  more again (about as much as 16 example values per option) and is the
+  most accurate.
 - Examples work best in the shape of the question. Labelling every word
   beats listing slot values by 3.8 points on test (83.5 against 79.7), and
   the labelled keys matter: the same labels as bare `[word, label]` pairs
