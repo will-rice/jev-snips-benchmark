@@ -134,6 +134,31 @@ min(`stated`, value probability).
 Scored on the second half of the dev set (formulation 6: 77.8). On the first
 half, 27 scores 78.9 against 76.2. The rule has no tuned parameters.
 
+### Repairing boundaries after token classification
+
+Formulation 6 gets 1,416 of the dev set's 1,804 gold spans exactly right. Of
+the 388 it misses: 142 have some word given another slot type, 121 have the
+right type but lack an edge word, 110 have the right type but are split by
+unlabelled words in the middle, and 15 are missed entirely. The slot words
+it labels `none` are mostly function words ("the" 99 of 301, "in" 33, "of"
+23), and it is confident about them: median probability 0.88 for `none` and
+0.09 for the correct slot.
+
+| #   | Formulation                                                                             | Dev slot F1 | Tokens |
+| --- | --------------------------------------------------------------------------------------- | ----------- | ------ |
+| 6   | The benchmark decoder (gaps of up to two words filled)                                  | 77.7        | 3,013  |
+| 29  | A `none` word next to a slot joins it when that slot's probability for the word is high | 77.7        | 3,013  |
+| 30  | Most probable label sequence with a bonus for repeating the previous label (Viterbi)    | 77.7        | 3,013  |
+| 31  | A yes/no per `none` word touching a predicted slot: "is it part of that value?"         | 77.7        | 3,657  |
+
+- Second half of the dev set; settings tuned on the first half. In all three
+  the tuning chose the setting that changes nothing. Any active setting
+  scored lower: row 31 at a 0.5 threshold scores 68.4.
+- Rows 29 and 30 use only the saved per-word probabilities. They cannot help
+  because the missed words are not close calls.
+- Row 31's yes/no was asked 2,207 times, 148 of which should be yes. At 0.5
+  it says yes to 114 of those and to 314 that should be no.
+
 ### One question per slot, options are words
 
 Each slot type gets a `Choice` over the numbered words plus `none`
@@ -198,6 +223,10 @@ word that points to the work without naming it, or the kind of work."}`
   10 and 11). It also costs one request per word.
 - **Hiding the words to the right hurts.** A word like "the" cannot be
   labelled without what follows (rows 3 and 10).
+- **The remaining boundary errors cannot be repaired after the fact.** Jev
+  is confident that "the" or "of" inside a name is filler, so neither the
+  saved probabilities nor a follow-up yes/no about the word recovers it
+  (rows 29–31).
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.
@@ -236,5 +265,6 @@ word that points to the work without naming it, or the kind of work."}`
 - Treating slots with a few fixed values (`rating_unit`, `object_select`,
   `music_item`) as closed sets, as the function-calling cookbook does. It
   needs value lists from the training split.
-- Extending a title across small words in the decoder when `none` only
-  narrowly won, using the saved per-word probabilities.
+- Rules about specific function words at span edges (for example always
+  attaching a leading "the"). SNIPS is not consistent about these, so it
+  would be tuning to the annotation.

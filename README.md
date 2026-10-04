@@ -184,6 +184,9 @@ What we learned:
   but misses 12% of the slots that are there, for a net loss.
 - Borrowing the span question's boundaries adds two points on the dev set,
   for 2.7 times the tokens. It is not in the benchmark.
+- The remaining errors are mostly small words inside names ("the", "of")
+  labelled `none`. Jev is confident about them, so neither the saved
+  probabilities nor a follow-up yes/no about the word repairs them.
 
 ## Setup
 
