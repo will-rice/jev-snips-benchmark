@@ -1,16 +1,45 @@
 # Slot-filling formulations tried with Jev
 
-A record of every way we posed SNIPS slot filling to Jev, with its score,
-including the ones that are not in the benchmark code.
+A record of every way we posed SNIPS intent detection and slot filling to
+Jev, with its score, including the ones that are not in the benchmark code.
+
+## Summary
+
+The benchmark ended up with token classification (formulation 6), examples
+shown with a label for every word (41), retrieved by TF-IDF similarity for
+the slot request (46) and for the intent request (57). On the test set that
+takes slot F1 from 59.7 with label names alone to 86.9.
+
+The path there, in the order it was walked:
+
+| Step                                                                | Test slot F1 |
+| ------------------------------------------------------------------- | ------------ |
+| Per-word question with a bracketed word, label names only           | 26.0         |
+| The same with label descriptions                                    | 32.1         |
+| Per-slot question over candidate spans, with descriptions           | 72.2         |
+| Per-word question as labelled fields, `none` described, gaps filled | 76.4         |
+| 32 fixed examples, slots shown as whole values                      | 79.7         |
+| 32 fixed examples, every word labelled                              | 83.5         |
+| 8 examples retrieved by similarity, for the slot request            | 86.2         |
+| Retrieved examples for the intent request as well                   | 86.9         |
+
+Things that were tried and did not help: feeding earlier labels back,
+hiding the words to the right, `what` / `not_for` rubrics, a `stated` yes/no
+per slot, reading the top few words of a per-slot question, repairing span
+boundaries after the fact, more than eight retrieved examples,
+deduplicating the retrieval pool, and embedding similarity.
+
+The sections below are grouped by kind of formulation, not by date.
 
 ## Setup
 
 - **Dev set:** 700 utterances sampled from the SNIPS training split (seed 0,
   aligned rows only). Used for every comparison here so the test set was not
   tuned on.
-- **Condition:** label descriptions on, gold intent given, so the numbers
-  isolate slot filling. They are comparable with each other, not with the
-  README's test figures, which use the predicted intent.
+- **Condition:** unless a section says otherwise, label descriptions on and
+  gold intent given, so the numbers isolate slot filling. They are
+  comparable with each other, not with the README's test figures, which use
+  the predicted intent.
 - **Metric:** span-level micro slot F1 (`seqeval`). "All slots right" is the
   share of utterances with every tag correct. Tokens are mean input tokens
   per utterance.
@@ -19,9 +48,13 @@ including the ones that are not in the benchmark code.
   was run several times as the reference for later experiments: its two
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
-- The **benchmark** runs formulation 6, token classification, and nothing
-  else. Everything else here was a throwaway script, except formulation 12,
-  which was a second benchmark method until it was removed.
+- The **benchmark** code contains formulations 6, 41, 46, and 57.
+  Everything else here was a throwaway script, except formulation 12, which
+  was a second benchmark method until it was removed, and formulation 35,
+  which was the first few-shot format.
+- The dev set is drawn from the same split as the few-shot examples, and it
+  overstated every example-based gain. Each change was confirmed on the test
+  set before it was kept; test figures are given where they exist.
 
 ## Results
 

@@ -1,90 +1,32 @@
 # Jev on SNIPS
 
-Zero-shot and few-shot evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's
-"System One" decision model, on the SNIPS natural language understanding
-benchmark: intent detection and slot filling.
+An evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's "System One"
+decision model, on the SNIPS natural language understanding benchmark:
+intent detection and slot filling.
 
 Jev does not generate text. It takes some state and a set of typed questions
 and returns typed answers with probabilities. This project asks how far that
-gets on a task normally solved by a trained tagger, without showing the model
-a single labelled example, how much one-sentence label descriptions help,
-and how much a handful of labelled examples adds.
+gets on a task normally solved by a trained tagger: with label names alone,
+with one-sentence label descriptions, and with a handful of labelled
+examples.
 
 ## Results
 
 SNIPS test set, 700 utterances, model `jev-1.13.0`. Mean of three runs per
 condition, with the range across runs in brackets.
 
-| Condition    | Intent accuracy  | Slot F1          | Frame accuracy   |
-| ------------ | ---------------- | ---------------- | ---------------- |
-| Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
-| Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
-| Few-shot     | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
-| Retrieved    | 96.1 (96.1–96.1) | 86.9 (86.7–87.2) | 69.5 (69.0–70.4) |
+| Condition    | What Jev is shown                              | Intent accuracy  | Slot F1          | Frame accuracy   |
+| ------------ | ---------------------------------------------- | ---------------- | ---------------- | ---------------- |
+| Names        | Label names                                    | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
+| Descriptions | Names and one-sentence descriptions            | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
+| Few-shot     | Descriptions and 32 fixed examples per intent  | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
+| Retrieved    | Descriptions and the 8 most similar examples   | 96.1 (96.1–96.1) | 86.9 (86.7–87.2) | 69.5 (69.0–70.4) |
+| _Joint BERT_ | _Fine-tuned on all 13,084 training utterances_ | _98.6_           | _97.0_           | _92.8_           |
 
-Names and descriptions are zero-shot. Few-shot adds a fixed 32 labelled
-training utterances per intent to the descriptions condition. Retrieved
-instead adds the 8 training utterances most similar to each utterance, drawn
-from the whole training split, to both the intent and the slot request.
-
-What the numbers say:
-
-- **Intent detection needs almost nothing.** Names alone give 94.3%, and
-  descriptions add under a point. Supervised models trained on the 13,084
-  SNIPS training utterances reach 98.6% (Joint BERT, below).
-- **One-sentence descriptions are worth 17 points of slot F1.** The gain is
-  in the slots, not the intent: on utterances where every condition got the
-  intent right, slot F1 goes from 61.8 to 79.0.
-- **A few labelled examples add another 7 points.** Showing 32 training
-  utterances of the predicted intent, with every word labelled, lifts slot
-  F1 from 76.4 to 83.5 and frame accuracy from 49.9 to 61.9, for 3.1 times
-  the slot tokens. Slots with a few fixed values jump
-  (`object_part_of_series_type` 17 to 86, `current_location` 62 to 100,
-  `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
-  41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
-- **Choosing examples by similarity beats a fixed sample, for half the
-  tokens.** With the intent question unchanged, showing the slot request
-  the 8 training utterances most like the one being labelled scored 86.2
-  slot F1 against 83.5 for 32 fixed ones, and got 68% of utterances entirely
-  right against 62%. (The retrieved row above is higher, 86.9 and 69.5,
-  because it also retrieves examples for the intent.) It draws on all 12,833 distinct
-  training utterances, though, where few-shot uses 224. SNIPS utterances
-  are templated, so 12% of test utterances retrieve an example that differs
-  from them by one word. Jev is still doing more than looking labels up:
-  copying each word's label from the same 8 examples scores 72 on the dev
-  set, where Jev with them scores 89.5.
-- **Retrieved examples help the intent too.** Showing the intent question
-  the 8 most similar training utterances of any intent, with their intents,
-  cuts intent errors from about 34 to 27 of 700 (95.1 to 96.1). Most of what
-  remains is three intents that overlap in meaning: `SearchCreativeWork`,
-  `SearchScreeningEvent`, and `PlayMusic`.
-- **Examples must have the shape of the question.** The same 32 utterances
-  shown as whole slot values ("album: the best of") scored 79.7: Jev left
-  the first word of a phrase out of its slot more often ("movie" in "movie
-  house"). Labelling every word of each example fixed that.
-- **Token classification beats the extraction patterns in the Jev docs** by
-  4 to 10 points of slot F1, at about 60% of the tokens. See the next table.
-- **How the question is posed matters as much as what is asked.** On a
-  held-out dev set, the same per-word question scored 32 slot F1 when the
-  word was marked with brackets inside a sentence and `none` had no
-  description, 60 once `none` was described, 68 with short gaps filled, and
-  76 once the word and its context were given as labelled fields. See
-  [What we tried](#what-we-tried).
-- **It is still well short of a trained tagger** (97.0 slot F1, below).
-  In every condition with examples, the weakest slots are titles and names
-  that only context can tell apart. With retrieved examples: `album` (39),
-  `entity_name` (50), `movie_name` (54), `object_name` (61), `track` (64).
-
-Jev's slot answers are not identical between runs, which is why each
-condition is run three times. The ranges above are at most a point and a
-half.
-
-For reference, a supervised model fine-tuned on the full training split,
-[Joint BERT](https://arxiv.org/abs/1902.10909) (Chen et al., 2019), reports
-98.6 intent accuracy, 97.0 slot F1, and 92.8 frame accuracy on this test
-set. The gap is the cost of not training: that model has learned SNIPS's
-phrasing, slot vocabulary, and annotation conventions from 13,084 labelled
-utterances, 64 of which repeat a test utterance.
+Names and descriptions are zero-shot. Few-shot and retrieved show Jev
+labelled training utterances; nothing is trained in any condition. The last
+row is a published supervised result
+([Chen et al., 2019](https://arxiv.org/abs/1902.10909)) for reference.
 
 Input tokens per run, mean of three runs:
 
@@ -94,6 +36,49 @@ Input tokens per run, mean of three runs:
 | Descriptions | 336,703 | 2,113,624 |
 | Few-shot     | 336,703 | 6,608,202 |
 | Retrieved    | 524,801 | 3,144,857 |
+
+Jev's answers are not identical between runs, which is why each condition is
+run three times. The ranges are at most a point and a half.
+
+### What the numbers say
+
+- **Intent detection needs almost nothing.** Names alone give 94.3%.
+  Descriptions add under a point, and retrieved examples one more.
+- **One-sentence descriptions are worth 17 points of slot F1.** The gain is
+  in the slots, not the intent: on utterances where every condition got the
+  intent right, slot F1 goes from 61.8 to 79.0.
+- **A few labelled examples add another 7 points.** 32 training utterances
+  of the predicted intent lift slot F1 from 76.4 to 83.5, for 3.1 times the
+  slot tokens. Slots with a few fixed values jump
+  (`object_part_of_series_type` 17 to 86, `current_location` 62 to 100,
+  `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
+  41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
+- **Which examples matters more than how many.** With the intent question
+  unchanged, the 8 training utterances most similar to the one being
+  labelled scored 86.2 slot F1 against 83.5 for 32 fixed ones, at half the
+  tokens. Retrieving examples for the intent as well takes intent accuracy
+  from 95.1 to 96.1 and slot F1 to 86.9.
+- **Retrieval uses the whole training split.** It draws on 12,833 distinct
+  training utterances, where few-shot uses 224. SNIPS is templated: 12% of
+  test utterances retrieve an example that differs from them by one word.
+  Jev is still doing more than looking labels up: copying each word's label
+  from the same 8 examples scores 72 on the dev set, where Jev with them
+  scores 89.5.
+- **How the question is posed matters as much as what is asked.** The same
+  per-word question scored 32 slot F1 on a dev set when the word was marked
+  with brackets in a sentence and `none` had no description, and 76 once
+  `none` was described and the word and its context were given as labelled
+  fields. Examples follow the same rule: shown as whole slot values they
+  scored 79.7 on test, and with every word labelled 83.5.
+- **Token classification beats the extraction patterns in the Jev docs** by
+  4 to 10 points of slot F1, at about 60% of the tokens. See the next
+  section.
+- **It is still well short of a trained tagger.** That model has learned
+  SNIPS's phrasing, slot vocabulary, and annotation conventions from 13,084
+  labelled utterances, 64 of which repeat a test utterance. What Jev gets
+  wrong is mostly titles and names that only context can tell apart. With
+  retrieved examples: `album` (39), `entity_name` (50), `movie_name` (54),
+  `object_name` (61), `track` (64).
 
 ### Against the approaches the Jev docs recommend
 
@@ -128,13 +113,22 @@ the wording is in the research note linked below.
 Slot filling is posed as token classification: every word gets exactly one
 class, a slot type or `none`. Each utterance takes two requests.
 
-1. **Intent.** One `Choice` over the 7 intents, with the utterance as state
-   (and, in the retrieved condition, examples beside it).
+1. **Intent.** One `Choice` over the 7 intents, with the utterance as state.
 2. **Slots.** One `Choice` per word over the predicted intent's slot types
-   plus `none`, all in one request. The instructions are labelled fields,
-   not a sentence: the intent, the word, the words before it, the words
-   after it, and the question "Which slot does `word` fill in `utterance`?".
-   The state is the utterance under an `utterance` key.
+   plus `none`, all in one request.
+
+The slot question's instructions are labelled fields, not a sentence, and
+the state is the utterance under an `utterance` key:
+
+```json
+{
+  "intent": "AddToPlaylist",
+  "words_before": "add sabrina",
+  "word": "salerno",
+  "words_after": "to the grime instrumentals playlist",
+  "question": "Which slot does `word` fill in `utterance`? Answer none if it fills no slot."
+}
+```
 
 Decoding turns the per-word classes into spans: adjacent words with the same
 type form one span, and up to two unlabelled words between two words of the
@@ -143,39 +137,35 @@ same type join it, so the small words inside a title stay in its span.
 Only the slot types of the **predicted** intent are offered, the way an
 assistant's schema restricts which slots an intent accepts. The gold intent
 is never used, so an intent error costs the slots as well. The mapping from
-intent to slot types is read from the training split's labels. Under names
-and descriptions no training utterance is sent to the model.
+intent to slot types is read from the training split's labels.
 
 ### Conditions
 
-- **Names.** The model sees intent names and slot names only.
-- **Descriptions.** Every intent and slot also carries a one-sentence
-  definition from `descriptions.py`, passed as the option's description.
-  `none` has one too ("not part of any slot value"). Slots are described per
-  intent, because one slot name can mean different things (`object_type` is
-  a kind of book under `RateBook` and a showtime listing under
-  `SearchScreeningEvent`).
+| Condition    | Intent request                                                    | Slot request                                                              |
+| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Names        | Intent names                                                      | Slot names                                                                |
+| Descriptions | Names with descriptions                                           | Names with descriptions, including one for `none`                         |
+| Few-shot     | As descriptions                                                   | As descriptions, plus 32 fixed examples of the predicted intent           |
+| Retrieved    | As descriptions, plus the 8 most similar examples from any intent | As descriptions, plus the 8 most similar examples of the predicted intent |
 
-- **Few-shot.** Descriptions, plus 32 labelled training utterances of the
-  predicted intent in the slot request's state. Each is shown as its text
-  and a label for every word, a slot or `none`
-  (`{"word": "the", "slot": "album"}`), the same judgement the question
-  asks for.
-  The 224 examples (1.7% of the training split) are sampled once with a
-  fixed seed. The intent question is unchanged.
-
-- **Retrieved.** As few-shot, but the examples are chosen per utterance by
-  TF-IDF cosine over words and adjacent word pairs. The intent request shows
-  the 8 most similar training utterances of any intent, each with its
-  intent. The slot request shows the 8 most similar of the predicted intent,
-  each with every word labelled. The pool is every usable
-  training utterance, with repeated texts counted once (12,833), so this
-  condition uses the whole training
-  split as a lookup table, without training on it.
-
-Names and descriptions are zero-shot. The descriptions were written from the
-label names and the training split only, before any description run on the
-test set, and they contain no example values.
+- **Descriptions** are one-sentence definitions from `descriptions.py`,
+  passed as each option's description. Slots are described per intent,
+  because one slot name can mean different things (`object_type` is a kind
+  of book under `RateBook` and a showtime listing under
+  `SearchScreeningEvent`). They were written from the label names and the
+  training split only, before any description run on the test set, and they
+  contain no example values.
+- **Examples** are training utterances placed in the request's state. For
+  the slot request each one is its text and a label for every word, a slot
+  or `none` (`{"word": "the", "slot": "album"}`), the same judgement the
+  question asks for. For the intent request each one is its text and its
+  intent.
+- **Few-shot** examples are 32 per intent, sampled once with a fixed seed:
+  224 in all, 1.7% of the training split.
+- **Retrieved** examples are chosen per utterance by TF-IDF cosine over
+  words and adjacent word pairs. The pool is every usable training
+  utterance with repeated texts counted once (12,833), so this condition
+  uses the whole training split as a lookup table, without training on it.
 
 SNIPS repeats some test utterances in its training split: 64 training rows
 have the same text as one of 25 test utterances. Those rows are never used
@@ -199,8 +189,9 @@ a time expression into a structured value.
 
 ## What we tried
 
-Token classification with labelled fields was chosen from the formulations
-below; all of them are recorded with their question wording in
+The method above was chosen from the formulations below. All of them,
+including the ones that are not in the code, are recorded with their
+question wording and what each showed in
 [docs/research/2026-10-04-slot-formulations.md](docs/research/2026-10-04-slot-formulations.md).
 
 The scores are slot F1 on a dev set of 700 utterances held out from the
@@ -261,14 +252,10 @@ scores 77.8.
 ‡ Mean of the two halves of the dev set, where the benchmark formulation
 scores 76.5.
 
-What we learned:
+What we learned, beyond the findings at the top:
 
-- Each word has exactly one class, and asking for it directly is the best
-  single formulation once it is posed well.
 - `none` needs a description like every other option. Without one, the
   bracketed question gave a slot to 55% of the words outside any slot.
-- Marking a word with brackets inside a sentence is a poor way to point at
-  it. Labelled fields gained about 10 points on the same question.
 - Showing earlier labels, or hiding the words to the right, did not help.
 - `what` / `not_for` rubrics did not help: the main remaining error is small
   words inside titles labelled `none`, not sibling slots.
@@ -276,26 +263,19 @@ What we learned:
   but misses 12% of the slots that are there, for a net loss.
 - Borrowing the span question's boundaries adds two points on the dev set,
   for 2.7 times the tokens. It is not in the benchmark.
-- Labelled examples help. Utterances in the state, listed with their slot
-  values, are the cheap way to give them: example values on every option
-  cost about twice the tokens for the same gain. Labelling every word costs
-  more again (about as much as 16 example values per option) and is the
-  most accurate.
-- Similarity by shared words and word pairs is as good as embedding
-  similarity here, and needs no model. Retrieval for the slot request is
-  already limited to one intent, so what matters is the wording around the
-  slot. Embeddings were not tried for the intent request.
-- Which examples matters more than how many. Eight chosen by similarity
-  beat 64 chosen at random, and more than eight adds nothing.
+- Utterances listed with their slot values are the cheapest way to give
+  examples; labelling every word costs more and is the most accurate. The
+  labelled keys matter: the same labels as bare `[word, label]` pairs score
+  lower than whole slot values.
+- More than eight retrieved examples adds nothing, and embedding similarity
+  is no better than shared words and word pairs for choosing them.
 - With examples, descriptions add about half a point; without examples they
   add 17.
-- Examples work best in the shape of the question. Labelling every word
-  beats listing slot values by 3.8 points on test (83.5 against 79.7), and
-  the labelled keys matter: the same labels as bare `[word, label]` pairs
-  score lower than whole slot values.
 - The remaining errors are mostly small words inside names ("the", "of")
   labelled `none`. Jev is confident about them, so neither the saved
   probabilities nor a follow-up yes/no about the word repairs them.
+- The dev set, drawn from the same split as the examples, overstated every
+  example-based gain. Each was confirmed on the test set before it was kept.
 
 ## Setup
 
@@ -311,19 +291,8 @@ Add your `TYPESAFE_API_KEY` to `.env`.
 
 ## Usage
 
-Run a condition three times on the full test set:
-
-```bash
-uv run run names
-```
-
-```bash
-uv run run descriptions
-```
-
-```bash
-uv run run fewshot
-```
+Run a condition three times on the full test set (`names`, `descriptions`,
+`fewshot`, or `retrieved`):
 
 ```bash
 uv run run retrieved

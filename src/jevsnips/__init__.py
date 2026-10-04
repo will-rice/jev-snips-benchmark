@@ -1,1 +1,1 @@
-"""Zero-shot and few-shot evaluation of Jev on the SNIPS NLU benchmark."""
+"""Evaluation of Jev on the SNIPS NLU benchmark, without training."""

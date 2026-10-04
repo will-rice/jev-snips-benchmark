@@ -1,7 +1,7 @@
 [project]
 name = "jevsnips"
 version = "0.1.0"
-description = "Zero-shot and few-shot evaluation of TypeSafe AI's Jev on the SNIPS NLU benchmark."
+description = "Evaluation of TypeSafe AI's Jev on the SNIPS NLU benchmark, without training."
 readme = "README.md"
 authors = [{ name = "Will Rice", email = "wrice20@gmail.com" }]
 requires-python = ">=3.13"
