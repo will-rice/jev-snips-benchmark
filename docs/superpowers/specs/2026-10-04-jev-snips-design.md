@@ -231,7 +231,8 @@ recorded in `docs/research/2026-10-04-slot-formulations.md`.
 
 A third condition, `fewshot`, is the descriptions condition plus
 `FEWSHOT_EXAMPLES = 32` labelled training utterances of the predicted intent
-in the slot request's state. Examples are sampled once per intent with
+in the slot request's state, each shown as its text and a
+`{"word", "slot"}` label for every word. Examples are sampled once per intent with
 `FEWSHOT_SEED`, from aligned training rows whose text does not appear in the
 evaluated split. The intent question is unchanged. This supersedes the Scope
 section's statements that few-shot is out of scope and that no training

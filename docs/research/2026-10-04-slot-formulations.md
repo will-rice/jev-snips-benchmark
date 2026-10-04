@@ -179,9 +179,10 @@ scores 76.5 (75.3 and 77.7).
 | 38  | 8 example values per slot option                  | 81.7        | 57%             | 6,992  |
 | 39  | 16 example values per slot option                 | 81.8        | 58%             | 9,621  |
 
-- **35** is the benchmark's `fewshot` condition. Test, three runs with the
-  predicted intent: 79.7 slot F1 (79.5–79.9), 54.3 frame accuracy
-  (53.9–54.9), 3.92M slot input tokens per run.
+- **35** was the benchmark's first `fewshot` condition. Test, three runs
+  with the predicted intent: 79.7 slot F1 (79.5–79.9), 54.3 frame accuracy
+  (53.9–54.9), 3.92M slot input tokens per run. It was replaced by 41
+  below.
 - The test gain over descriptions is 3.3 points, about half the 6.8 on dev.
   The two differ in the example sample (one seed each), in the dev set using
   the gold intent, and in the dev set being drawn from the same split as the
@@ -197,6 +198,39 @@ scores 76.5 (75.3 and 77.7).
   `movie_name`); a large drop on `object_location_type` (85 to 46).
 - SNIPS's training split contains 64 rows whose text equals one of 25 test
   utterances, with the same labels. They are excluded from the examples.
+
+### Few-shot example format
+
+Formulation 35 dropped `object_location_type` on test from 85 to 46 slot F1.
+The cause was one boundary error: in "movie house" and "movie theatre" it
+labelled the second word and left "movie" as `none` (probability of `none`
+for that word 0.23 with descriptions, 0.58 with examples). The effect was
+general: the first word of a multi-word slot was labelled `none` in 123 of
+780 cases with descriptions and 170 with formulation 35.
+
+The examples in 35 show whole slot values, while the question asks about
+one word. These variants change only how the same sampled utterances are
+shown. Mean of the two dev halves; "first word" counts multi-word gold slots
+on the whole dev set whose first word was labelled `none`.
+
+| #   | Formulation                                                  | Dev slot F1 | First word | Tokens |
+| --- | ------------------------------------------------------------ | ----------- | ---------- | ------ |
+| 35  | 32 utterances, slots as whole values (re-run)                | 83.0        | 141        | 5,564  |
+| 40  | 16 utterances, every word as `{"word", "slot"}`              | 83.4        | 128        | 6,158  |
+| 41  | **32 utterances, every word as `{"word", "slot"}`**          | 85.3        | 118        | 9,250  |
+| 42  | 64 utterances, every word as `{"word", "slot"}`              | 85.7        | 110        | 15,764 |
+| 43  | 32 utterances, every word as a bare `[word, label]` pair     | 81.2        | 126        | 6,169  |
+| 44  | 32 utterances, whole values and bare per-word pairs together | 85.3        | 117        | 8,840  |
+
+- **41** is the benchmark's `fewshot` condition. Test, three runs: 83.5 slot
+  F1 (83.4–83.6), 61.9 frame accuracy (61.6–62.3), 6.61M slot input tokens
+  per run. `object_location_type` is back to 87, and the first word of a
+  multi-word slot is labelled `none` in 118 of 780 cases.
+- The test gain over descriptions is 7.1 points; the dev set predicted 8.8.
+- Bare pairs (43) are worse than whole values. The labelled keys carry the
+  meaning; the docs say Jev is trained on structure.
+- An example in 41: `{"utterance": "play the best of abba", "words":
+[{"word": "play", "slot": "none"}, {"word": "the", "slot": "album"}, ...]}`.
 
 ### One question per slot, options are words
 
@@ -266,8 +300,10 @@ word that points to the work without naming it, or the kind of work."}`
   is confident that "the" or "of" inside a name is filler, so neither the
   saved probabilities nor a follow-up yes/no about the word recovers it
   (rows 29–31).
-- **Examples teach what a description cannot.** Labelled utterances in the
-  state add 3 points on test and 7 on dev, mostly on slots with a few fixed
+- **Examples teach what a description cannot, if they look like the
+  question.** Utterances with every word labelled add 7 points on test;
+  the same utterances shown as whole slot values add 3 and make Jev drop
+  the first word of a phrase. The gain is mostly on slots with a few fixed
   values. They sit in the state once, so they cost far less than example
   values repeated on every option (rows 35 and 38).
 - **A `Choice` over words finds a slot but not its extent.** Probability
@@ -305,7 +341,6 @@ word that points to the work without naming it, or the kind of work."}`
 - Several example samples on test, to measure how much few-shot depends on
   which utterances are drawn, and choosing examples similar to the utterance
   instead of at random.
-- Why `object_location_type` falls with examples.
 - Using the top-k reading for confident slots and the span question for the
   rest.
 - Treating slots with a few fixed values (`rating_unit`, `object_select`,

@@ -19,7 +19,7 @@ condition, with the range across runs in brackets.
 | ------------ | ---------------- | ---------------- | ---------------- |
 | Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
 | Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
-| Few-shot     | 95.0 (94.9–95.0) | 79.7 (79.5–79.9) | 54.3 (53.9–54.9) |
+| Few-shot     | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
 
 Names and descriptions are zero-shot. Few-shot adds 32 labelled training
 utterances per intent to the descriptions condition.
@@ -32,13 +32,17 @@ What the numbers say:
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
   in the slots, not the intent: on utterances where every condition got the
   intent right, slot F1 goes from 61.5 to 78.7.
-- **A few labelled examples add another 3 points.** Showing 32 training
-  utterances of the predicted intent lifts slot F1 from 76.4 to 79.7 and
-  frame accuracy from 49.9 to 54.3, for 1.9 times the slot tokens. The gain
-  is uneven: slots with a few fixed values jump (`object_part_of_series_type`
-  17 to 86, `current_location` 62 to 100, `movie_type` 75 to 99), titles
-  barely move (`track` 41 to 42, `album` 26 to 29), and one slot falls
-  (`object_location_type` 85 to 46).
+- **A few labelled examples add another 7 points.** Showing 32 training
+  utterances of the predicted intent, with every word labelled, lifts slot
+  F1 from 76.4 to 83.5 and frame accuracy from 49.9 to 61.9, for 3.1 times
+  the slot tokens. Slots with a few fixed values jump
+  (`object_part_of_series_type` 17 to 86, `current_location` 62 to 100,
+  `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
+  41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
+- **Examples must have the shape of the question.** The same 32 utterances
+  shown as whole slot values ("album: the best of") scored 79.7: Jev left
+  the first word of a phrase out of its slot more often ("movie" in "movie
+  house"). Labelling every word of each example fixed that.
 - **Token classification beats the extraction patterns in the Jev docs** by
   4 to 10 points of slot F1, at about 60% of the tokens. See the next table.
 - **How the question is posed matters as much as what is asked.** On a
@@ -48,9 +52,9 @@ What the numbers say:
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
-  With few-shot, the weakest slots are mostly titles and names that only
-  context can tell apart: `album` (29), `entity_name` (40), `track` (42),
-  `object_location_type` (46), `movie_name` (50), `object_name` (56).
+  With few-shot, the weakest slots are titles and names that only context
+  can tell apart: `album` (30), `track` (43), `entity_name` (47),
+  `movie_name` (50), `cuisine` (52), `genre` (56), `object_name` (56).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -61,7 +65,7 @@ Input tokens per run, mean of three runs:
 | ------------ | ------- | --------- |
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
-| Few-shot     | 336,703 | 3,917,498 |
+| Few-shot     | 336,703 | 6,608,202 |
 
 ### Against the approaches the Jev docs recommend
 
@@ -124,8 +128,10 @@ and descriptions no training utterance is sent to the model.
   `SearchScreeningEvent`).
 
 - **Few-shot.** Descriptions, plus 32 labelled training utterances of the
-  predicted intent in the slot request's state, each shown as its text and
-  its slots as whole values (`{"slot": "album", "value": "the best of"}`).
+  predicted intent in the slot request's state. Each is shown as its text
+  and a label for every word, a slot or `none`
+  (`{"word": "the", "slot": "album"}`), the same judgement the question
+  asks for.
   The 224 examples (1.7% of the training split) are sampled once with a
   fixed seed. The intent question is unchanged.
 
@@ -176,8 +182,12 @@ per utterance.
 | 3 labelled utterances of the intent in the state                          | 78.0 ‡      | 3,256  |
 | 8 labelled utterances                                                     | 80.8 ‡      | 3,671  |
 | 16 labelled utterances                                                    | 81.6 ‡      | 4,302  |
-| 32 labelled utterances (**the few-shot condition**)                       | 83.3 ‡      | 5,564  |
+| 32 labelled utterances                                                    | 83.3 ‡      | 5,564  |
 | 64 labelled utterances                                                    | 83.9 ‡      | 8,184  |
+| 16 utterances with every word labelled                                    | 83.4 ‡      | 6,158  |
+| 32 utterances with every word labelled (**the few-shot condition**)       | 85.3 ‡      | 9,250  |
+| 64 utterances with every word labelled                                    | 85.7 ‡      | 15,764 |
+| 32 utterances as bare `[word, label]` pairs                               | 81.2 ‡      | 6,169  |
 | 3 example values on each slot option                                      | 79.0 ‡      | 5,101  |
 | 8 example values on each slot option                                      | 81.7 ‡      | 6,992  |
 | 16 example values on each slot option                                     | 81.8 ‡      | 9,621  |
@@ -221,8 +231,11 @@ What we learned:
   for 2.7 times the tokens. It is not in the benchmark.
 - Labelled examples help, and whole utterances in the state are the cheap
   way to give them: example values on every option cost about twice the
-  tokens for the same gain. The dev set overstated the gain (6.8 points
-  there, 3.3 on test).
+  tokens for the same gain.
+- Examples work best in the shape of the question. Labelling every word
+  beats listing slot values by 3.8 points on test (83.5 against 79.7), and
+  the labelled keys matter: the same labels as bare `[word, label]` pairs
+  score lower than whole slot values.
 - The remaining errors are mostly small words inside names ("the", "of")
   labelled `none`. Jev is confident about them, so neither the saved
   probabilities nor a follow-up yes/no about the word repairs them.

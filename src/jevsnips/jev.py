@@ -2,7 +2,6 @@
 
 from collections.abc import Mapping, Sequence
 
-from seqeval.metrics.sequence_labeling import get_entities
 from typesafe_sdk import Choice, JSONValue, SystemOneResponse, TypeSafeClient
 
 from jevsnips.config import MAX_GAP, MODEL, NONE
@@ -136,17 +135,18 @@ def token_questions(
 
 
 def labelled_examples(utterances: Sequence[Utterance]) -> list[JSONValue]:
-    """Show each utterance with its slots as whole values.
+    """Show each utterance with every word's slot, or none.
 
-    Whole values show where a slot starts and stops, including the small
-    words inside names and titles that a word judged alone looks like filler.
+    The examples have the same shape as the question, one label per word.
+    Shown only as whole slot values, they made the model leave the first
+    word of a phrase out of its slot more often.
     """
     return [
         {
             "utterance": " ".join(utterance.tokens),
-            "slots": [
-                {"slot": slot, "value": " ".join(utterance.tokens[start : end + 1])}
-                for slot, start, end in get_entities(list(utterance.tags))
+            "words": [
+                {"word": word, "slot": NONE if tag == "O" else tag[2:]}
+                for word, tag in zip(utterance.tokens, utterance.tags, strict=True)
             ],
         }
         for utterance in utterances
