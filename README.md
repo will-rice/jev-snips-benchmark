@@ -20,9 +20,12 @@ condition, with the range across runs in brackets.
 | Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
 | Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
 | Few-shot     | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
+| Retrieved    | 95.0 (94.9–95.1) | 86.2 (86.1–86.3) | 68.0 (67.6–68.3) |
 
-Names and descriptions are zero-shot. Few-shot adds 32 labelled training
-utterances per intent to the descriptions condition.
+Names and descriptions are zero-shot. Few-shot adds a fixed 32 labelled
+training utterances per intent to the descriptions condition. Retrieved
+instead adds the 8 training utterances most similar to each utterance, drawn
+from the whole training split.
 
 What the numbers say:
 
@@ -39,6 +42,13 @@ What the numbers say:
   (`object_part_of_series_type` 17 to 86, `current_location` 62 to 100,
   `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
   41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
+- **Choosing examples by similarity beats a fixed sample, for half the
+  tokens.** Showing the 8 training utterances most like the one being
+  labelled scores 86.2 slot F1 against 83.5 for 32 fixed ones, and gets 68%
+  of utterances entirely right against 62%. It draws on all 13,019 usable
+  training utterances, though, where few-shot uses 224. Jev is doing more
+  than looking labels up: copying each word's label from the same 8
+  examples scores 72 on the dev set, where Jev with them scores 89.5.
 - **Examples must have the shape of the question.** The same 32 utterances
   shown as whole slot values ("album: the best of") scored 79.7: Jev left
   the first word of a phrase out of its slot more often ("movie" in "movie
@@ -52,9 +62,9 @@ What the numbers say:
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
-  With few-shot, the weakest slots are titles and names that only context
-  can tell apart: `album` (30), `track` (43), `entity_name` (47),
-  `movie_name` (50), `cuisine` (52), `object_name` (56), `genre` (56).
+  In every condition with examples, the weakest slots are titles and names
+  that only context can tell apart. With retrieved examples: `album` (33),
+  `entity_name` (49), `movie_name` (50), `track` (55), `object_name` (59).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -66,6 +76,7 @@ Input tokens per run, mean of three runs:
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
 | Few-shot     | 336,703 | 6,608,202 |
+| Retrieved    | 336,703 | 3,133,568 |
 
 ### Against the approaches the Jev docs recommend
 
@@ -135,13 +146,20 @@ and descriptions no training utterance is sent to the model.
   The 224 examples (1.7% of the training split) are sampled once with a
   fixed seed. The intent question is unchanged.
 
+- **Retrieved.** As few-shot, but the examples are chosen per utterance: the
+  8 training utterances of the predicted intent most similar to it, by
+  TF-IDF cosine over words and adjacent word pairs. The pool is every usable
+  training utterance (13,019), so this condition uses the whole training
+  split as a lookup table, without training on it.
+
 Names and descriptions are zero-shot. The descriptions were written from the
 label names and the training split only, before any description run on the
 test set, and they contain no example values.
 
 SNIPS repeats some test utterances in its training split: 64 training rows
 have the same text as one of 25 test utterances. Those rows are never used
-as few-shot examples. Supervised results on SNIPS include them in training.
+as examples, fixed or retrieved, so a test utterance cannot be shown with
+its own labels. Supervised results on SNIPS include them in training.
 
 ### Metrics
 
@@ -191,6 +209,13 @@ per utterance.
 | 3 example values on each slot option                                      | 79.0 ‡      | 5,101  |
 | 8 example values on each slot option                                      | 81.7 ‡      | 6,992  |
 | 16 example values on each slot option                                     | 81.8 ‡      | 9,621  |
+| 4 utterances most similar to the utterance, every word labelled           | 87.6 ‡      | 3,739  |
+| 8 most similar utterances (**the retrieved condition**)                   | 89.5 ‡      | 4,474  |
+| 16 most similar utterances                                                | 89.4 ‡      | 5,981  |
+| 32 most similar utterances                                                | 89.6 ‡      | 9,048  |
+| 8 most similar utterances, no descriptions                                | 89.0 ‡      | 3,059  |
+| 32 fixed utterances with every word labelled, no descriptions             | 84.7 ‡      | 7,834  |
+| Copy each word's label from the 8 most similar utterances, without Jev    | 72.0        | 0      |
 | **Per word, left to right**                                               |             |        |
 | Whole utterance, word bracketed, earlier labels shown                     | 34.9        | 4,874  |
 | Only the words so far, last word bracketed, earlier labels shown          | 45.3        | 4,756  |
@@ -234,6 +259,10 @@ What we learned:
   cost about twice the tokens for the same gain. Labelling every word costs
   more again (about as much as 16 example values per option) and is the
   most accurate.
+- Which examples matters more than how many. Eight chosen by similarity
+  beat 64 chosen at random, and more than eight adds nothing.
+- With examples, descriptions add about half a point; without examples they
+  add 17.
 - Examples work best in the shape of the question. Labelling every word
   beats listing slot values by 3.8 points on test (83.5 against 79.7), and
   the labelled keys matter: the same labels as bare `[word, label]` pairs
@@ -268,6 +297,10 @@ uv run run descriptions
 
 ```bash
 uv run run fewshot
+```
+
+```bash
+uv run run retrieved
 ```
 
 Compare the saved runs, overall and per slot type:
@@ -331,6 +364,7 @@ src/jevsnips/
 ├── models.py        # Utterance, SlotPrediction, Prediction, Parse
 ├── data.py          # Load utterances, the slot schema, few-shot examples
 ├── descriptions.py  # One-sentence definitions of intents and slots
+├── retrieval.py     # Choose examples by similarity to the utterance
 ├── jev.py           # Build questions, call Jev, decode answers
 ├── metrics.py       # Intent accuracy, slot F1, frame accuracy
 └── scripts/

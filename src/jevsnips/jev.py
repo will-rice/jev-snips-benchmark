@@ -4,13 +4,14 @@ from collections.abc import Mapping, Sequence
 
 from typesafe_sdk import Choice, JSONValue, SystemOneResponse, TypeSafeClient
 
-from jevsnips.config import MAX_GAP, MODEL, NONE
+from jevsnips.config import MAX_GAP, MODEL, NONE, RETRIEVED_EXAMPLES
 from jevsnips.descriptions import (
     INTENT_DESCRIPTIONS,
     NONE_DESCRIPTION,
     SLOT_DESCRIPTIONS,
 )
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
+from jevsnips.retrieval import ExampleIndex, retrieve
 
 
 def predict(
@@ -18,6 +19,7 @@ def predict(
     utterance: Utterance,
     schema: Mapping[str, Sequence[str]],
     examples: Mapping[str, Sequence[Utterance]],
+    index: ExampleIndex,
     condition: Condition,
 ) -> Prediction:
     """Predict the intent, then classify each word into one of its slots.
@@ -25,13 +27,16 @@ def predict(
     Slots are conditioned on the predicted intent, never the gold one. Under
     names the model sees label names only. Under descriptions every intent
     and slot is offered with its definition. Under fewshot the slot request
-    also shows labelled training utterances of the predicted intent.
+    also shows a fixed sample of labelled training utterances of the
+    predicted intent; under retrieved it shows the ones most similar to the
+    utterance instead.
 
     Args:
         client: An open TypeSafe client.
         utterance: The utterance to label.
         schema: Each intent's slot types.
-        examples: Each intent's labelled training utterances.
+        examples: Each intent's fixed sample of labelled training utterances.
+        index: Every usable training utterance, indexed for retrieval.
         condition: What the model is shown besides label names.
 
     Returns:
@@ -56,6 +61,10 @@ def predict(
     slot_state: dict[str, JSONValue] = {"utterance": state}
     if condition == "fewshot":
         slot_state["labelled_examples"] = labelled_examples(examples[intent.choice])
+    if condition == "retrieved":
+        slot_state["labelled_examples"] = labelled_examples(
+            retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
+        )
     slot_response = client.system_one(
         slot_state,
         token_questions(

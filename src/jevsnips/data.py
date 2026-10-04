@@ -59,11 +59,26 @@ def load_examples() -> dict[str, list[Utterance]]:
     """Sample labelled training utterances for each intent.
 
     The sample is fixed by FEWSHOT_SEED, so every run shows the model the
-    same examples. SNIPS repeats some evaluated utterances in its training
-    split; those are never used as examples.
+    same examples.
 
     Returns:
         Intents in sorted order, each with FEWSHOT_EXAMPLES utterances.
+    """
+    sampler = random.Random(FEWSHOT_SEED)
+    return {
+        intent: sampler.sample(utterances, FEWSHOT_EXAMPLES)
+        for intent, utterances in load_example_pool().items()
+    }
+
+
+def load_example_pool() -> dict[str, list[Utterance]]:
+    """Load every training utterance that may be shown as an example.
+
+    SNIPS repeats some evaluated utterances in its training split; those are
+    left out, so an evaluated utterance is never shown with its own labels.
+
+    Returns:
+        Intents in sorted order, each with its usable training utterances.
     """
     evaluated = {utterance.tokens for utterance in load_utterances(SPLIT)}
     by_intent: dict[str, list[Utterance]] = {}
@@ -77,11 +92,7 @@ def load_examples() -> dict[str, list[Utterance]]:
                         tokens=tuple(tokens), intent=row["intent"], tags=tuple(tags)
                     )
                 )
-    sampler = random.Random(FEWSHOT_SEED)
-    return {
-        intent: sampler.sample(utterances, FEWSHOT_EXAMPLES)
-        for intent, utterances in sorted(by_intent.items())
-    }
+    return dict(sorted(by_intent.items()))
 
 
 def download(split: str) -> Path:
