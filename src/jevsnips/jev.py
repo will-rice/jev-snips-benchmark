@@ -4,8 +4,12 @@ from collections.abc import Mapping, Sequence
 
 from typesafe_sdk import Choice, ChoiceAnswer, SystemOneResponse, TypeSafeClient
 
-from jevsnips.config import MAX_OPTIONS, MODEL, NONE
-from jevsnips.descriptions import INTENT_DESCRIPTIONS, SLOT_DESCRIPTIONS
+from jevsnips.config import MAX_GAP, MAX_OPTIONS, MODEL, NONE
+from jevsnips.descriptions import (
+    INTENT_DESCRIPTIONS,
+    NONE_DESCRIPTION,
+    SLOT_DESCRIPTIONS,
+)
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
 
 
@@ -48,7 +52,11 @@ def predict(
     }
 
     token_response = client.system_one(
-        state, token_questions(tokens, intent.choice, slots), model=MODEL
+        {"utterance": state},
+        token_questions(
+            tokens, intent.choice, slots, NONE_DESCRIPTION if described else None
+        ),
+        model=MODEL,
     )
     span_response = client.system_one(
         state, span_questions(tokens, intent.choice, slots), model=MODEL
@@ -97,26 +105,39 @@ def intent_question(intents: Mapping[str, str | None]) -> Choice:
 
 
 def token_questions(
-    tokens: Sequence[str], intent: str, slots: Mapping[str, str | None]
+    tokens: Sequence[str],
+    intent: str,
+    slots: Mapping[str, str | None],
+    none_description: str | None,
 ) -> dict[str, Choice]:
     """Build one question per token asking which slot type it fills.
 
-    The token is bracketed inside the utterance so a repeated word is
-    identified by position. A slot's description, if any, is its option's
-    criteria.
+    The word and the words on either side of it are labelled fields of the
+    instructions, which the model reads more reliably than a marker inside a
+    sentence, and which tell a repeated word apart by its context. The
+    question refers to the `utterance` key of the state.
+
+    A slot's description, if any, is its option's criteria, and so is the
+    none option's: without one, the model gives most words outside a slot a
+    slot anyway.
     """
-    criteria = {**slots, NONE: None}
-    questions = {}
-    for index, token in enumerate(tokens):
-        marked = " ".join([*tokens[:index], f"[{token}]", *tokens[index + 1 :]])
-        questions[f"token_{index}"] = Choice(
-            instructions=(
-                f"The intent is {intent}. Which slot does the bracketed word "
-                f'fill in: "{marked}"? Answer {NONE} if it fills no slot.'
-            ),
+    criteria = {**slots, NONE: none_description}
+    return {
+        f"token_{index}": Choice(
+            instructions={
+                "intent": intent,
+                "words_before": " ".join(tokens[:index]),
+                "word": token,
+                "words_after": " ".join(tokens[index + 1 :]),
+                "question": (
+                    "Which slot does `word` fill in `utterance`? "
+                    f"Answer {NONE} if it fills no slot."
+                ),
+            },
             criteria=criteria,
         )
-    return questions
+        for index, token in enumerate(tokens)
+    }
 
 
 def span_questions(
@@ -167,10 +188,24 @@ def span_candidates(tokens: Sequence[str]) -> dict[str, tuple[int, int]]:
 
 
 def decode_tokens(choices: Sequence[str]) -> tuple[str, ...]:
-    """Convert per-token slot types to BIO tags, merging equal neighbours."""
+    """Convert per-token slot types to BIO tags, merging equal neighbours.
+
+    Up to MAX_GAP unlabelled words between two words of the same type take
+    that type, so small words inside a name or title stay in its span.
+    """
+    labels = list(choices)
+    for start, label in enumerate(labels):
+        if label == NONE:
+            continue
+        for end in range(start + 2, min(start + MAX_GAP + 2, len(labels))):
+            if labels[end] == label and all(
+                between == NONE for between in labels[start + 1 : end]
+            ):
+                labels[start + 1 : end] = [label] * (end - start - 1)
+                break
     tags = []
     previous = NONE
-    for choice in choices:
+    for choice in labels:
         if choice == NONE:
             tags.append("O")
         else:

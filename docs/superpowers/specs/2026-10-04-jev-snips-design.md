@@ -204,6 +204,16 @@ times, saved as `results/{split}-{condition}-run{n}.jsonl`. `report` compares
 the conditions: mean and range per metric, the same on utterances where
 every condition got the intent right, and slot F1 per slot type.
 
+## Token question revision
+
+Added after the descriptions ablation, developed on a 700-utterance dev set
+held out from train. The token question's instructions are labelled fields
+(`intent`, `words_before`, `word`, `words_after`, `question`) and its state
+is `{"utterance": ...}`; no marker is placed inside the utterance. Under the
+descriptions condition the `none` option carries a description. Decoding
+fills up to `MAX_GAP = 2` unlabelled words between two words of the same
+type. This supersedes the bracketed-sentence question described above.
+
 ## Documentation
 
 `README.md` is rewritten for this project: what is measured, the results

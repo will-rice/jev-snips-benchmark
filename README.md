@@ -16,10 +16,10 @@ condition, with the range across runs in brackets.
 
 | Condition    | Scheme | Intent accuracy  | Slot F1          | Frame accuracy   |
 | ------------ | ------ | ---------------- | ---------------- | ---------------- |
-| Names        | Token  | 94.3 (94.3–94.3) | 26.0 (25.9–26.2) | 0.9 (0.7–1.0)    |
-| Names        | Span   | 94.3 (94.3–94.3) | 48.2 (47.7–48.8) | 19.2 (18.4–20.1) |
-| Descriptions | Token  | 94.9 (94.9–95.0) | 32.1 (31.7–32.4) | 2.0 (2.0–2.0)    |
-| Descriptions | Span   | 94.9 (94.9–95.0) | 72.3 (72.1–72.5) | 40.7 (40.4–41.0) |
+| Names        | Token  | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
+| Names        | Span   | 94.3 (94.3–94.3) | 48.3 (47.9–49.1) | 19.3 (19.0–19.6) |
+| Descriptions | Token  | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
+| Descriptions | Span   | 95.1 (94.9–95.3) | 72.2 (72.1–72.4) | 40.5 (40.3–40.7) |
 
 Intent accuracy is shared by both schemes within a condition: they use the
 same predicted intent.
@@ -27,21 +27,26 @@ same predicted intent.
 What the numbers say:
 
 - **Intent detection needs almost nothing.** Names alone give 94.3%, and
-  descriptions add about half a point. Supervised models trained on the
-  13,084 SNIPS training utterances reach roughly 98–99%.
-- **Asking for a span beats labelling words.** The span scheme scores about
-  double the token scheme in both conditions. Labelling each word
-  independently pulls neighbouring function words into slots and breaks span
-  boundaries.
-- **One-sentence descriptions are worth 24 points of slot F1** in the span
-  scheme (48.2 to 72.3) and double frame accuracy. The gain is largest on
-  slots whose names say little: `best_rating` (16 to 95), `geographic_poi`
-  (30 to 96), `object_location_type` (36 to 98), `state` (13 to 75).
-- **The gain is in the slots, not the intent.** On the utterances where both
-  conditions got the intent right, span slot F1 goes from 49.7 to 74.5.
+  descriptions add under a point. Supervised models trained on the 13,084
+  SNIPS training utterances reach roughly 98–99%.
+- **Labelling each word is the better formulation.** With descriptions it
+  reaches 76.4 slot F1 against 72.2 for picking spans, gets half of all
+  utterances entirely right against 40%, and uses 58% of the tokens. Each
+  word gets exactly one label and the slot types compete for it in one
+  distribution, which is the shape of the task.
+- **One-sentence descriptions are worth 17 points of slot F1** for the token
+  scheme and 24 for the span scheme. The gain is in the slots, not the
+  intent: on utterances where both conditions got the intent right, token
+  slot F1 goes from 61.5 to 78.7.
+- **How the question is posed matters as much as what is asked.** On a
+  held-out dev set, the same per-word question scored 32 slot F1 when the
+  word was marked with brackets inside a sentence and `none` had no
+  description, 60 once `none` was described, and 76 once the word and its
+  context were given as labelled fields. See [Method](#method).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
-  `object_select` scores 0 in the span scheme under both conditions, and
-  `playlist`, `track`, and `current_location` stay below 45.
+  With descriptions, the token scheme is weakest on titles and names that
+  only context can tell apart: `object_part_of_series_type` (17), `album`
+  (27), `track` (41), `entity_name` (42), `playlist` (51).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point, so the
@@ -51,17 +56,21 @@ Input tokens per run:
 
 | Condition    | Intent  | Token scheme | Span scheme |
 | ------------ | ------- | ------------ | ----------- |
-| Names        | 252,703 | 925,789      | 3,612,495   |
-| Descriptions | 336,703 | 1,715,101    | 3,659,296   |
+| Names        | 252,703 | 1,122,639    | 3,612,495   |
+| Descriptions | 336,703 | 2,113,624    | 3,654,086   |
 
 ## Method
 
 Each utterance gets three requests, all with the utterance as state.
 
 1. **Intent.** One `Choice` over the 7 intents.
-2. **Token scheme.** One `Choice` per word, asking which slot type the
-   bracketed word fills (`add sabrina [salerno] to the ...`). Adjacent words
-   with the same type are merged into one span.
+2. **Token scheme.** One `Choice` per word over the intent's slot types plus
+   `none`. The instructions are labelled fields, not a sentence: the intent,
+   the word, the words before it, the words after it, and the question
+   "Which slot does `word` fill in `utterance`?". Adjacent words with the
+   same type are merged into one span, and up to two unlabelled words
+   between two words of the same type join it, so the small words inside a
+   title stay in its span.
 3. **Span scheme.** One `Choice` per slot type, asking which span of the
    utterance fills it. The options are the utterance's contiguous word spans.
    When two slot types pick overlapping spans, the more probable one is kept.
@@ -79,7 +88,9 @@ training utterance is sent to the model.
 - **Names.** The model sees intent names, slot names, and span texts only.
 - **Descriptions.** Every intent and slot also carries a one-sentence
   definition from `descriptions.py`. In the token scheme it is the option's
-  description; in the span scheme, where the options are spans, it is added
+  description, and `none` has one too ("not part of any slot value");
+  without it, more than half the words outside any slot were given a slot.
+  In the span scheme, where the options are spans, it is added
   to the question. Slots are described per intent, because one slot name can
   mean different things (`object_type` is a kind of book under `RateBook` and
   a showtime listing under `SearchScreeningEvent`).
@@ -87,6 +98,25 @@ training utterance is sent to the model.
 Both conditions are zero-shot. The descriptions were written from the label
 names and the training split only, before any description run on the test
 set, and they contain no example values.
+
+### How the token question was developed
+
+The form of the token question, the `none` description, and the gap of two
+words were chosen on a dev set of 700 utterances held out from the training
+split, not on the test set. Each dev figure below is slot F1 with
+descriptions and the gold intent:
+
+| Per-word question                                           | Dev slot F1 |
+| ----------------------------------------------------------- | ----------- |
+| Word marked with brackets in a sentence, `none` undescribed | 31.9        |
+| The same, labelling words left to right with earlier labels | 34.9        |
+| The same, `none` described                                  | 60.0        |
+| The same, short gaps filled                                 | 67.9        |
+| Word and its context as labelled fields, `none` described   | 76.4        |
+
+The span scheme scored 75.5 on the same dev set. Reading the top few words
+from one question per slot scored 67.9 at a quarter of the span scheme's
+tokens.
 
 ### Metrics
 
@@ -99,11 +129,11 @@ set, and they contain no example values.
 
 Measured on the test set's 1,790 gold slot spans:
 
-| Limitation                                                    | Scheme | Spans affected |
-| ------------------------------------------------------------- | ------ | -------------- |
-| Two adjacent spans of the same type merge into one            | Token  | 0              |
-| A slot type can fill only one span per utterance              | Span   | 0              |
-| A span whose text also occurs earlier resolves to the earlier | Span   | 1              |
+| Limitation                                                      | Scheme | Spans affected |
+| --------------------------------------------------------------- | ------ | -------------- |
+| Two spans of the same type within two words of each other merge | Token  | 0              |
+| A slot type can fill only one span per utterance                | Span   | 0              |
+| A span whose text also occurs earlier resolves to the earlier   | Span   | 1              |
 
 A `Choice` takes at most 255 options, so utterances longer than 22 words
 offer spans up to the longest length that fits (14 words for the longest

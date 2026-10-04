@@ -16,6 +16,11 @@ INTENT_DESCRIPTIONS = {
     "SearchScreeningEvent": "Find when or where movies are showing.",
 }
 
+NONE_DESCRIPTION = (
+    "The word is not part of any slot value: a command word, an article, a "
+    "preposition, or other filler."
+)
+
 SLOT_DESCRIPTIONS = {
     "AddToPlaylist": {
         "artist": "The name of the musician or band whose music is being added.",

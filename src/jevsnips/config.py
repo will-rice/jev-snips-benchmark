@@ -10,5 +10,6 @@ MODEL = "jev-latest"
 MAX_WORKERS = 8
 RUNS = 3
 MAX_OPTIONS = 255
+MAX_GAP = 2
 NONE = "none"
 RESULTS_DIR = Path("results")
