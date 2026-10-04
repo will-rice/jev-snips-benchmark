@@ -120,8 +120,8 @@ def test_decode_tokens_chains_fills_across_several_gaps() -> None:
     )
 
 
-def test_labelled_examples_show_each_utterance_with_its_slot_values() -> None:
-    """An example pairs the utterance text with its slots as whole values."""
+def test_labelled_examples_label_every_word_of_each_utterance() -> None:
+    """An example shows the judgement being asked: one slot or none per word."""
     example = Utterance(
         tokens=("play", "the", "best", "of", "abba"),
         intent="PlayMusic",
@@ -130,9 +130,12 @@ def test_labelled_examples_show_each_utterance_with_its_slot_values() -> None:
     assert labelled_examples([example]) == [
         {
             "utterance": "play the best of abba",
-            "slots": [
-                {"slot": "album", "value": "the best of"},
-                {"slot": "artist", "value": "abba"},
+            "words": [
+                {"word": "play", "slot": "none"},
+                {"word": "the", "slot": "album"},
+                {"word": "best", "slot": "album"},
+                {"word": "of", "slot": "album"},
+                {"word": "abba", "slot": "artist"},
             ],
         }
     ]
