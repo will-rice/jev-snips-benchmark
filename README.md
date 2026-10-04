@@ -1,215 +1,287 @@
-# Agent Harness Template
+# Jev on SNIPS
 
-A batteries-included template for building AI agent evaluation harnesses using modern Python tooling.
+Zero-shot evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's
+"System One" decision model, on the SNIPS natural language understanding
+benchmark: intent detection and slot filling.
 
-## Features
+Jev does not generate text. It takes some state and a set of typed questions
+and returns typed answers with probabilities. This project asks how far that
+gets on a task normally solved by a trained tagger, without showing the model
+a single labelled example, and how much one-sentence label descriptions help.
 
-- **Pydantic Configuration**: Type-safe configuration management
-- **Protocol-based Design**: Clean `Agent` and `Task` protocols for easy extensibility
-- **Result Tracking**: Structured result collection with `pydantic` models
-- **Modern Tooling**: Built with `uv` for fast dependency management
-- **Code Quality**: Pre-configured with `ruff`, `ty`, `pytest`, and `pre-commit` hooks
+## Results
 
-## Project Structure
+SNIPS test set, 700 utterances, model `jev-1.13.0`. Mean of three runs per
+condition, with the range across runs in brackets.
 
-```
-.
-├── src/agent_harness/
-│   ├── agent.py               # Agent protocol
-│   ├── config.py              # Pydantic configuration
-│   ├── harness.py             # Main Harness class
-│   ├── result.py              # Result data models
-│   ├── task.py                # Task protocol
-│   └── scripts/
-│       └── run.py             # Entry point script
-├── tests/                     # Test files
-├── pyproject.toml             # Project metadata and dependencies
-├── .pre-commit-config.yaml    # Pre-commit hooks configuration
-└── .env.example               # Example environment variables
-```
+| Condition    | Scheme | Intent accuracy  | Slot F1          | Frame accuracy   |
+| ------------ | ------ | ---------------- | ---------------- | ---------------- |
+| Names        | Token  | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
+| Names        | Span   | 94.3 (94.3–94.3) | 48.3 (47.9–49.1) | 19.3 (19.0–19.6) |
+| Descriptions | Token  | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
+| Descriptions | Span   | 95.1 (94.9–95.3) | 72.2 (72.1–72.4) | 40.5 (40.3–40.7) |
 
-## Quick Start
+Intent accuracy is shared by both schemes within a condition: they use the
+same predicted intent.
 
-### 1. Install uv
+What the numbers say:
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+- **Intent detection needs almost nothing.** Names alone give 94.3%, and
+  descriptions add under a point. Supervised models trained on the 13,084
+  SNIPS training utterances reach roughly 98–99%.
+- **Labelling each word is the better formulation.** With descriptions it
+  reaches 76.4 slot F1 against 72.2 for picking spans, gets half of all
+  utterances entirely right against 40%, and uses 58% of the tokens. Each
+  word gets exactly one label and the slot types compete for it in one
+  distribution, which is the shape of the task.
+- **One-sentence descriptions are worth 17 points of slot F1** for the token
+  scheme and 24 for the span scheme. The gain is in the slots, not the
+  intent: on utterances where both conditions got the intent right, token
+  slot F1 goes from 61.5 to 78.7.
+- **How the question is posed matters as much as what is asked.** On a
+  held-out dev set, the same per-word question scored 32 slot F1 when the
+  word was marked with brackets inside a sentence and `none` had no
+  description, 60 once `none` was described, 68 with short gaps filled, and
+  76 once the word and its context were given as labelled fields. See [What we tried](#what-we-tried).
+- **It is still well short of a trained tagger** (roughly 96–97% slot F1).
+  With descriptions, the token scheme is weakest on titles and names that
+  only context can tell apart: `object_part_of_series_type` (17), `album`
+  (27), `track` (41), `entity_name` (42), `playlist` (51).
 
-### 2. Use this template for a new project
+Jev's slot answers are not identical between runs, which is why each
+condition is run three times. The ranges above are under one point, so the
+differences between rows are far outside the noise.
 
-When creating a new project from this template:
+Input tokens per run, mean of three runs:
 
-1. Clone or fork this repository
-2. Rename the `src/agent_harness` directory to your project name:
-   ```bash
-   mv src/agent_harness src/your_project_name
-   ```
-3. Update `pyproject.toml`:
-   - Change `name = "agent_harness"` to your project name
-   - Update `module-name = ["agent_harness"]` to your project name
-   - Update the `run` script path in `[project.scripts]`
-4. Update import statements in Python files to use your new project name
+| Condition    | Intent  | Token scheme | Span scheme |
+| ------------ | ------- | ------------ | ----------- |
+| Names        | 252,703 | 1,122,639    | 3,612,495   |
+| Descriptions | 336,703 | 2,113,624    | 3,654,086   |
 
-### 3. Install dependencies
+## Method
+
+Each utterance gets three requests, all with the utterance as state (the
+token scheme passes it under an `utterance` key).
+
+1. **Intent.** One `Choice` over the 7 intents.
+2. **Token scheme.** One `Choice` per word over the intent's slot types plus
+   `none`. The instructions are labelled fields, not a sentence: the intent,
+   the word, the words before it, the words after it, and the question
+   "Which slot does `word` fill in `utterance`?". Adjacent words with the
+   same type are merged into one span, and up to two unlabelled words
+   between two words of the same type join it, so the small words inside a
+   title stay in its span.
+3. **Span scheme.** One `Choice` per slot type, asking which span of the
+   utterance fills it. The options are the utterance's contiguous word spans.
+   When two slot types pick overlapping spans, the more probable one is kept.
+   The API reports probabilities to two decimals, so ties are common and are
+   broken by slot name.
+
+Both slot schemes offer only the slot types of the **predicted** intent, the
+way an assistant's schema restricts which slots an intent accepts. The gold
+intent is never used, so an intent error costs the slots as well. The mapping
+from intent to slot types is read from the training split's labels; no
+training utterance is sent to the model.
+
+### Conditions
+
+- **Names.** The model sees intent names, slot names, and span texts only.
+- **Descriptions.** Every intent and slot also carries a one-sentence
+  definition from `descriptions.py`. In the token scheme it is the option's
+  description, and `none` has one too ("not part of any slot value"). On
+  the dev set, with the earlier bracketed question, leaving `none`
+  undescribed gave a slot to more than half the words outside any slot.
+  In the span scheme, where the options are spans, it is added
+  to the question. Slots are described per intent, because one slot name can
+  mean different things (`object_type` is a kind of book under `RateBook` and
+  a showtime listing under `SearchScreeningEvent`).
+
+Both conditions are zero-shot. The descriptions were written from the label
+names and the training split only, before any description run on the test
+set, and they contain no example values.
+
+### Metrics
+
+- **Intent accuracy:** utterances with the correct intent.
+- **Slot F1:** span-level micro F1 (conlleval, via `seqeval`).
+- **Semantic-frame accuracy:** utterances with the correct intent and every
+  slot tag correct.
+
+### Known limitations
+
+Measured on the test set's 1,790 gold slot spans:
+
+| Limitation                                                      | Scheme | Spans affected |
+| --------------------------------------------------------------- | ------ | -------------- |
+| Two spans of the same type within two words of each other merge | Token  | 0              |
+| A slot type can fill only one span per utterance                | Span   | 0              |
+| A span whose text also occurs earlier resolves to the earlier   | Span   | 1              |
+
+A `Choice` takes at most 255 options, so utterances longer than 22 words
+offer spans up to the longest length that fits (14 words for the longest
+test utterance, above the longest gold span of 10).
+
+## What we tried
+
+The two schemes above are what the benchmark runs. Every formulation we
+tried is recorded with its question wording in
+[docs/research/2026-10-04-slot-formulations.md](docs/research/2026-10-04-slot-formulations.md).
+The scores below are slot F1 on a dev set of 700 utterances held out from
+the training split, with descriptions and the gold intent, so they compare
+with each other and not with the test table above. Tokens are mean input
+tokens per utterance.
+
+| Formulation                                                               | Dev slot F1 | Tokens |
+| ------------------------------------------------------------------------- | ----------- | ------ |
+| **Per word, options are slot types**                                      |             |        |
+| Word marked with brackets in a sentence, `none` undescribed               | 31.9        | 2,445  |
+| The same, `none` described                                                | 60.0        | 2,734  |
+| The same, short gaps inside a slot filled                                 | 67.9        | 2,734  |
+| Word and context as labelled fields, `none` described (**token scheme**)  | **76.4**    | 3,013  |
+| The token scheme with `what` / `not_for` option rubrics for sibling slots | 77.1 †      | 4,354  |
+| The same, plus "every word of a title counts" and a rubric for `none`     | 75.8 †      | 5,128  |
+| **Per word, left to right**                                               |             |        |
+| Whole utterance, word bracketed, earlier labels shown                     | 34.9        | 4,874  |
+| Only the words so far, last word bracketed, earlier labels shown          | 45.3        | 4,756  |
+| Only the words so far, no bracket, `none` described                       | 47.0        | 4,680  |
+| The same, earlier labels shown                                            | 22.2        | 4,912  |
+| **Per slot, options are spans**                                           |             |        |
+| Sentence question (**span scheme**)                                       | 75.5        | 5,084  |
+| Instructions as labelled fields                                           | 76.2        | 5,359  |
+| Asked only for slots a word-level question says are present               | 75.3        | ~4,000 |
+| **Per slot, options are words**                                           |             |        |
+| Top word only                                                             | 48.6        | 1,303  |
+| Top 3 words above 10% of the top probability, span from first to last     | 67.9        | 1,303  |
+| Top word as anchor, then a second question over spans containing it       | 61.3        | 2,890  |
+
+† Scored on the second half of the dev set, where the token scheme itself
+scores 77.8.
+
+What we learned:
+
+- Each word has exactly one class, and asking for it directly is the best
+  formulation once it is posed well.
+- `none` needs a description like every other option. Without one, the
+  bracketed question gave a slot to 55% of the words outside any slot.
+- Marking a word with brackets inside a sentence is a poor way to point at
+  it. Labelled fields gained 8.5 points on the same question.
+- Showing earlier labels, or hiding the words to the right, did not help.
+- `what` / `not_for` rubrics did not help the token scheme: its main error
+  is small words inside titles labelled `none`, not sibling slots.
+- A question over words finds where a slot is (the top word is inside the
+  gold span 92% of the time) but not how far it extends. It is the cheapest
+  formulation by a wide margin.
+- The span scheme asks about each slot separately, so sibling slots such as
+  `city` and `state` both claim the same phrase.
+
+## Setup
 
 ```bash
 uv sync
 ```
 
-### 4. Set up environment variables
-
-Copy the example environment file and add your API keys:
-
 ```bash
 cp .env.example .env
-# Edit .env and add your API keys
 ```
 
-### 5. Install pre-commit hooks
-
-```bash
-uv run pre-commit install
-```
+Add your `TYPESAFE_API_KEY` to `.env`.
 
 ## Usage
 
-### Running the Harness
-
-Run the entry point script:
+Run a condition three times on the full test set:
 
 ```bash
-uv run run
+uv run run names
 ```
 
-### Implementing Your Agent
-
-Create a class that conforms to the `Agent` protocol:
-
-```python
-from agent_harness.agent import Agent
-
-
-class MyAgent:
-    """A custom agent implementation."""
-
-    def run(self, task):
-        """Run the agent on a task and return the output."""
-        # Your agent logic here
-        return "agent output"
+```bash
+uv run run descriptions
 ```
 
-### Implementing Your Task
+Compare the saved runs, overall and per slot type:
 
-Create a class that conforms to the `Task` protocol:
-
-```python
-from agent_harness.task import Task
-
-
-class MyTask:
-    """A custom task implementation."""
-
-    @property
-    def id(self) -> str:
-        """Return the task identifier."""
-        return "my_task_001"
-
-    def evaluate(self, output) -> float:
-        """Evaluate agent output and return a score between 0 and 1."""
-        return 1.0 if output == "expected output" else 0.0
+```bash
+uv run report
 ```
 
-### Running an Evaluation
+Check the pipeline on the first 20 utterances:
+
+```bash
+uv run run names --limit 20
+```
+
+A limited run writes to its own files and leaves the full results in place.
+
+## Output
+
+Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
+per utterance: the tokens and gold labels, the condition, the predicted
+intent and its probabilities, and for each scheme the predicted tags, the
+probabilities of every question's options, and the input tokens used.
+
+Each record also carries a `parse` in the shape of a Snips NLU result, built
+from the predicted intent and the token scheme's slots:
+
+```json
+{
+  "intent": { "intentName": "AddToPlaylist", "probability": 1.0 },
+  "slots": [
+    { "value": "sabrina salerno", "entity": "artist", "slotName": "artist" },
+    {
+      "value": "grime instrumentals playlist",
+      "entity": "playlist",
+      "slotName": "playlist"
+    }
+  ]
+}
+```
+
+SNIPS labels each slot value with one name, so `entity` and `slotName` are
+the same, and `value` is the text from the utterance. Nothing resolves a
+value such as a time expression into a structured value.
+
+Records are `jevsnips.models.Prediction` objects:
 
 ```python
-from agent_harness.config import HarnessConfig
-from agent_harness.harness import Harness
+from pathlib import Path
 
-config = HarnessConfig(max_workers=4, timeout=30.0)
-harness = Harness(config=config)
+from jevsnips.models import Prediction
 
-agent = MyAgent()
-tasks = [MyTask()]
+lines = Path("results/test-descriptions-run1.jsonl").read_text().splitlines()
+predictions = [Prediction.model_validate_json(line) for line in lines]
+```
 
-results = harness.run(agent, tasks)
-for result in results:
-    print(f"Task {result.task_id}: score={result.score}")
+## Project structure
+
+```
+src/jevsnips/
+├── config.py        # Constants: dataset, model, limits
+├── models.py        # Utterance, SlotPrediction, Prediction, Parse
+├── data.py          # Load utterances and the per-intent slot schema
+├── descriptions.py  # One-sentence definitions of intents and slots
+├── jev.py           # Build questions, call Jev, decode answers
+├── metrics.py       # Intent accuracy, slot F1, frame accuracy
+└── scripts/
+    ├── run.py       # Run one condition
+    └── report.py    # Compare the saved runs
 ```
 
 ## Development
 
-### Running Tests
-
 ```bash
-uv run pytest
+uv run pre-commit run -a
 ```
 
-### Type Checking
+This formats, lints, type-checks, and runs the tests. The data tests download
+the dataset from the Hugging Face Hub.
 
-```bash
-uv run ty check src/
-```
+## Data
 
-### Linting and Formatting
-
-```bash
-uv run ruff check src/
-uv run ruff format src/
-```
-
-### Pre-commit Hooks
-
-Pre-commit hooks will automatically run on every commit to ensure code quality. To run manually:
-
-```bash
-uv run pre-commit run --all-files
-```
-
-## Configuration
-
-Edit `src/agent_harness/config.py` to customize harness settings:
-
-```python
-from pydantic import BaseModel
-
-
-class HarnessConfig(BaseModel):
-    max_workers: int = 1
-    timeout: float = 60.0
-    seed: int = 42
-    debug: bool = False
-```
-
-## Dependencies
-
-Core dependencies:
-
-- **Pydantic**: Data validation and configuration
-- **python-dotenv**: Environment variable management
-
-Development tools:
-
-- **ruff**: Fast Python linter and formatter
-- **ty**: Static type checker
-- **pytest**: Testing framework
-- **pre-commit**: Git hooks for code quality
-
-## Build System
-
-This project uses `uv_build` as the build backend. To build the project:
-
-```bash
-uv build
-```
+[`bkonkle/snips-joint-intent`](https://huggingface.co/datasets/bkonkle/snips-joint-intent),
+pinned to a fixed revision in `config.py`. SNIPS was introduced in
+[Coucke et al., 2018](https://arxiv.org/abs/1805.10190).
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-1. Create a new branch for your feature
-2. Make your changes
-3. Ensure all tests pass and pre-commit hooks succeed
-4. Submit a pull request
+See [LICENSE](LICENSE).
