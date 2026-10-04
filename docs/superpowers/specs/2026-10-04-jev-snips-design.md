@@ -29,6 +29,11 @@ with per-utterance predictions saved for later analysis.
   `TYPESAFE_API_KEY`, with built-in retry and backoff.
 - Jev's answers vary slightly between identical requests, and it reports
   probabilities to two decimals.
+- The state is ingested once per request and every question is evaluated
+  against it, so text in the state is billed once and text in a question's
+  options is billed per question.
+- `MODEL` is pinned to `jev-1.13.0`. The `jev-latest` alias moves when a new
+  release ships.
 
 ## Data
 
@@ -80,14 +85,20 @@ that `retrieved` replaces `fewshot`'s fixed examples.
   definition from `descriptions.py`, keyed by intent and slot, and `none`
   carries `NONE_DESCRIPTION`. Definitions were written from label names and
   the training split only and contain no example values.
-- `fewshot`: as `descriptions`, and the slot request's state also holds
-  `labelled_examples`: the fixed sample for the predicted intent.
+- `fewshot`: as `descriptions` for the intent request. The slot request's
+  state holds `slot_definitions` (each slot's definition, and `none`'s) and
+  `labelled_examples` (the fixed sample for the predicted intent); its
+  options carry no descriptions; and its question is "Which slot does `word`
+  fill in `utterance`? The slots are defined in `slot_definitions`. Label it
+  the way matching words are labelled in `labelled_examples`. Answer none if
+  it fills no slot."
 - `retrieved`: as `descriptions`, and both requests' states hold
   `labelled_examples` chosen for the utterance. The intent request shows the
   `RETRIEVED_EXAMPLES = 8` most similar pool utterances of any intent, and
   its state becomes `{"utterance", "labelled_examples"}` with the question
-  "What is the intent of `utterance`?". The slot request shows the 8 most
-  similar pool utterances of the predicted intent.
+  "What is the intent of `utterance`?". The slot request is as in `fewshot`,
+  with the 8 most similar pool utterances of the predicted intent as its
+  examples.
 
 Example shapes:
 

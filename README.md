@@ -19,8 +19,8 @@ condition, with the range across runs in brackets.
 | ------------ | ---------------------------------------------- | ---------------- | ---------------- | ---------------- |
 | Names        | Label names                                    | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.0 (29.9–30.3) |
 | Descriptions | Names and one-sentence descriptions            | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
-| Few-shot     | Descriptions and 32 fixed examples per intent  | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
-| Retrieved    | Descriptions and the 8 most similar examples   | 96.1 (96.1–96.1) | 86.9 (86.7–87.2) | 69.5 (69.0–70.4) |
+| Few-shot     | Descriptions and 32 fixed examples per intent  | 95.0 (94.9–95.1) | 84.4 (84.4–84.5) | 64.8 (64.6–65.1) |
+| Retrieved    | Descriptions and the 8 most similar examples   | 96.1 (96.1–96.1) | 89.4 (89.1–89.5) | 75.7 (75.1–76.1) |
 | _Joint BERT_ | _Fine-tuned on all 13,084 training utterances_ | _98.6_           | _97.0_           | _92.8_           |
 
 Names and descriptions are zero-shot. Few-shot and retrieved show Jev
@@ -34,11 +34,11 @@ Input tokens per run, mean of three runs:
 | ------------ | ------- | --------- |
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
-| Few-shot     | 336,703 | 6,608,202 |
-| Retrieved    | 524,801 | 3,144,857 |
+| Few-shot     | 336,703 | 5,905,086 |
+| Retrieved    | 524,801 | 2,440,043 |
 
 Jev's answers are not identical between runs, which is why each condition is
-run three times. The ranges are at most a point and a half.
+run three times. The ranges are at most one point.
 
 ### What the numbers say
 
@@ -47,29 +47,33 @@ run three times. The ranges are at most a point and a half.
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
   in the slots, not the intent: on utterances where every condition got the
   intent right, slot F1 goes from 61.8 to 79.0.
-- **A few labelled examples add another 7 points.** 32 training utterances
-  of the predicted intent lift slot F1 from 76.4 to 83.5, for 3.1 times the
+- **A few labelled examples add another 8 points.** 32 training utterances
+  of the predicted intent lift slot F1 from 76.4 to 84.4, for 2.8 times the
   slot tokens. Slots with a few fixed values jump
-  (`object_part_of_series_type` 17 to 86, `current_location` 62 to 100,
-  `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
-  41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
-- **Which examples matters more than how many.** With the intent question
-  unchanged, the 8 training utterances most similar to the one being
-  labelled scored 86.2 slot F1 against 83.5 for 32 fixed ones, at half the
-  tokens. Retrieving examples for the intent as well takes intent accuracy
-  from 95.1 to 96.1 and slot F1 to 86.9.
+  (`object_part_of_series_type` 17 to 84, `current_location` 62 to 100,
+  `movie_type` 75 to 100, `playlist` 51 to 75). Titles move less (`track`
+  41 to 47, `movie_name` 51 to 58), and `album` falls from 26 to 18.
+- **Which examples matters more than how many.** The 8 training utterances
+  most similar to the one being labelled score 89.4 slot F1 against 84.4
+  for 32 fixed ones, at 41% of the slot tokens. Part of that is the better
+  intent, which retrieved examples lift from 95.1 to 96.1; on utterances
+  where every condition got the intent right it is 91.5 against 87.1.
 - **Retrieval uses the whole training split.** It draws on 12,833 distinct
   training utterances, where few-shot uses 224. SNIPS is templated: 12% of
   test utterances retrieve an example that differs from them by one word.
   Jev is still doing more than looking labels up: copying each word's label
   from the same 8 examples scores 72 on the dev set, where Jev with them
-  scores 89.5.
-- **How the question is posed matters as much as what is asked.** The same
-  per-word question scored 32 slot F1 on a dev set when the word was marked
-  with brackets in a sentence and `none` had no description, and 76 once
-  `none` was described and the word and its context were given as labelled
-  fields. Examples follow the same rule: shown as whole slot values they
-  scored 79.7 on test, and with every word labelled 83.5.
+  scores 89 to 91.
+- **How the question is posed matters as much as what is asked.** Three
+  times, the same information presented differently moved the score by
+  more than any new information did. The per-word question went from 32 to
+  76 slot F1 on a dev set once `none` was described and the word and its
+  context were given as labelled fields instead of bracketed in a sentence.
+  The same 32 examples scored 79.7 on test shown as whole slot values and
+  83.5 with every word labelled. And telling the question to use the
+  examples, with the slot definitions moved into the state beside them,
+  took the retrieved condition from 86.9 to 89.4 while cutting its tokens
+  by 22%.
 - **Token classification beats the extraction patterns in the Jev docs** by
   4 to 10 points of slot F1, at about 60% of the tokens. See the next
   section.
@@ -77,8 +81,8 @@ run three times. The ranges are at most a point and a half.
   SNIPS's phrasing, slot vocabulary, and annotation conventions from 13,084
   labelled utterances, 64 of which repeat a test utterance. What Jev gets
   wrong is mostly titles and names that only context can tell apart. With
-  retrieved examples: `album` (39), `entity_name` (50), `movie_name` (54),
-  `object_name` (61), `track` (64).
+  retrieved examples: `album` (35), `movie_name` (55), `track` (58),
+  `entity_name` (58), `cuisine` (59).
 
 ### Against the approaches the Jev docs recommend
 
@@ -130,6 +134,13 @@ the state is the utterance under an `utterance` key:
 }
 ```
 
+When examples are shown (few-shot and retrieved), the slot definitions move
+out of the options into the state, under `slot_definitions`, where they are
+sent once instead of once per word, and the question becomes "Which slot
+does `word` fill in `utterance`? The slots are defined in
+`slot_definitions`. Label it the way matching words are labelled in
+`labelled_examples`."
+
 Decoding turns the per-word classes into spans: adjacent words with the same
 type form one span, and up to two unlabelled words between two words of the
 same type join it, so the small words inside a title stay in its span.
@@ -141,12 +152,12 @@ intent to slot types is read from the training split's labels.
 
 ### Conditions
 
-| Condition    | Intent request                                                    | Slot request                                                              |
-| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Names        | Intent names                                                      | Slot names                                                                |
-| Descriptions | Names with descriptions                                           | Names with descriptions, including one for `none`                         |
-| Few-shot     | As descriptions                                                   | As descriptions, plus 32 fixed examples of the predicted intent           |
-| Retrieved    | As descriptions, plus the 8 most similar examples from any intent | As descriptions, plus the 8 most similar examples of the predicted intent |
+| Condition    | Intent request                                                    | Slot request                                                                                 |
+| ------------ | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Names        | Intent names                                                      | Slot names                                                                                   |
+| Descriptions | Names with descriptions                                           | Names with descriptions, including one for `none`                                            |
+| Few-shot     | As descriptions                                                   | Slot names; definitions and 32 fixed examples of the predicted intent in the state           |
+| Retrieved    | As descriptions, plus the 8 most similar examples from any intent | Slot names; definitions and the 8 most similar examples of the predicted intent in the state |
 
 - **Descriptions** are one-sentence definitions from `descriptions.py`,
   passed as each option's description. Slots are described per intent,
@@ -187,6 +198,30 @@ into one. That affects none of the test set's 1,790 gold slot spans.
 Slot values are the words of the utterance. Nothing resolves a value such as
 a time expression into a structured value.
 
+## Checked against the Jev docs
+
+We read all of the Jev documentation against this implementation. Where the
+docs give guidance, the benchmark follows it, with two deliberate exceptions.
+
+- **Followed:** one narrow judgment per question; labelled fields instead of
+  string templates; backticked references to the parts of the state a
+  question should use; a described no-match option; reference material in
+  the state; only relevant context in the state (8 retrieved examples, not
+  32 fixed ones); a pinned model version (`jev-1.13.0`, not the `jev-latest`
+  alias); all of a word-level request's questions in one call.
+- **Tested and found not to matter:** the docs warn that Jev leans toward
+  the first option and say to reorder and check. Reversing or shuffling the
+  slot options changes about 1% of answers and no score.
+- **Exception, two requests instead of one.** The docs recommend asking
+  every question in a single request and ignoring the answers that turn out
+  not to apply. Here the slot request's options, definitions, and examples
+  all depend on the predicted intent, which is the case the docs allow a
+  second request for. A single-request version would ask the slot questions
+  for all seven intents at roughly seven times the slot tokens.
+- **Exception, examples in the state.** The docs show examples inside option
+  descriptions or instruction fields. Whole labelled utterances in the state
+  are billed once per request and scored higher here.
+
 ## What we tried
 
 The method above was chosen from the formulations below. All of them,
@@ -199,58 +234,67 @@ training split, with descriptions and the gold intent, so they compare with
 each other and not with the test tables above. Tokens are mean input tokens
 per utterance.
 
-| Formulation                                                               | Dev slot F1 | Tokens |
-| ------------------------------------------------------------------------- | ----------- | ------ |
-| **Per word, options are slot types**                                      |             |        |
-| Word marked with brackets in a sentence, `none` undescribed               | 31.9        | 2,445  |
-| The same, `none` described                                                | 60.0        | 2,734  |
-| The same, short gaps inside a slot filled                                 | 67.9        | 2,734  |
-| Word and context as labelled fields, `none` described (**the benchmark**) | **76.4**    | 3,013  |
-| The benchmark with `what` / `not_for` option rubrics for sibling slots    | 77.1 †      | 4,354  |
-| The same, plus "every word of a title counts" and a rubric for `none`     | 75.8 †      | 5,128  |
-| **The benchmark plus examples from the training split**                   |             |        |
-| 3 labelled utterances of the intent in the state                          | 78.0 ‡      | 3,256  |
-| 8 labelled utterances                                                     | 80.8 ‡      | 3,671  |
-| 16 labelled utterances                                                    | 81.6 ‡      | 4,302  |
-| 32 labelled utterances                                                    | 83.3 ‡      | 5,564  |
-| 64 labelled utterances                                                    | 83.9 ‡      | 8,184  |
-| 16 utterances with every word labelled                                    | 83.4 ‡      | 6,158  |
-| 32 utterances with every word labelled (**the few-shot condition**)       | 85.3 ‡      | 9,250  |
-| 64 utterances with every word labelled                                    | 85.7 ‡      | 15,764 |
-| 32 utterances as bare `[word, label]` pairs                               | 81.2 ‡      | 6,169  |
-| 3 example values on each slot option                                      | 79.0 ‡      | 5,101  |
-| 8 example values on each slot option                                      | 81.7 ‡      | 6,992  |
-| 16 example values on each slot option                                     | 81.8 ‡      | 9,621  |
-| 4 utterances most similar to the utterance, every word labelled           | 87.6 ‡      | 3,739  |
-| 8 most similar utterances (**the retrieved condition**)                   | 89.5 ‡      | 4,474  |
-| 16 most similar utterances                                                | 89.4 ‡      | 5,981  |
-| 32 most similar utterances                                                | 89.6 ‡      | 9,048  |
-| 8 most similar utterances by embedding similarity (two models tried)      | 88.3–88.5 ‡ | 4,520  |
-| 8 most similar utterances, no descriptions                                | 89.0 ‡      | 3,059  |
-| 32 fixed utterances with every word labelled, no descriptions             | 84.7 ‡      | 7,834  |
-| Copy each word's label from the 8 most similar utterances, without Jev    | 72.0        | 0      |
-| **Per word, left to right**                                               |             |        |
-| Whole utterance, word bracketed, earlier labels shown                     | 34.9        | 4,874  |
-| Only the words so far, last word bracketed, earlier labels shown          | 45.3        | 4,756  |
-| Only the words so far, no bracket, `none` described                       | 47.0        | 4,680  |
-| The same, earlier labels shown                                            | 22.2        | 4,912  |
-| **Per slot, options are spans (the docs' patterns)**                      |             |        |
-| Extraction cookbook: sentence question, spans plus `none`                 | 75.5        | 5,084  |
-| The same, instructions as labelled fields                                 | 76.2        | 5,359  |
-| The same, asked only for slots a word-level question says are present     | 75.3        | ~4,000 |
-| Function-calling cookbook: `stated` yes/no plus a span question           | 66.7 †      | 4,970  |
-| **Per slot, options are words**                                           |             |        |
-| Top word only                                                             | 48.6        | 1,303  |
-| Top 3 words above 10% of the top probability, span from first to last     | 67.9        | 1,303  |
-| Top word as anchor, then a second question over spans containing it       | 61.3        | 2,890  |
-| **Combination**                                                           |             |        |
-| The benchmark's labels with the extraction cookbook's span boundaries     | 79.8 †      | 8,097  |
+| Formulation                                                                                               | Dev slot F1 | Tokens |
+| --------------------------------------------------------------------------------------------------------- | ----------- | ------ |
+| **Per word, options are slot types**                                                                      |             |        |
+| Word marked with brackets in a sentence, `none` undescribed                                               | 31.9        | 2,445  |
+| The same, `none` described                                                                                | 60.0        | 2,734  |
+| The same, short gaps inside a slot filled                                                                 | 67.9        | 2,734  |
+| Word and context as labelled fields, `none` described (**the benchmark**)                                 | **76.4**    | 3,013  |
+| The benchmark with `what` / `not_for` option rubrics for sibling slots                                    | 77.1 †      | 4,354  |
+| The same, plus "every word of a title counts" and a rubric for `none`                                     | 75.8 †      | 5,128  |
+| **The benchmark plus examples from the training split**                                                   |             |        |
+| 3 labelled utterances of the intent in the state                                                          | 78.0 ‡      | 3,256  |
+| 8 labelled utterances                                                                                     | 80.8 ‡      | 3,671  |
+| 16 labelled utterances                                                                                    | 81.6 ‡      | 4,302  |
+| 32 labelled utterances                                                                                    | 83.3 ‡      | 5,564  |
+| 64 labelled utterances                                                                                    | 83.9 ‡      | 8,184  |
+| 16 utterances with every word labelled                                                                    | 83.4 ‡      | 6,158  |
+| 32 utterances with every word labelled                                                                    | 85.3 ‡      | 9,250  |
+| The same, definitions in the state and the question pointing at the examples (**the few-shot condition**) | 86.1 §      | 8,395  |
+| 64 utterances with every word labelled                                                                    | 85.7 ‡      | 15,764 |
+| 32 utterances as bare `[word, label]` pairs                                                               | 81.2 ‡      | 6,169  |
+| 3 example values on each slot option                                                                      | 79.0 ‡      | 5,101  |
+| 8 example values on each slot option                                                                      | 81.7 ‡      | 6,992  |
+| 16 example values on each slot option                                                                     | 81.8 ‡      | 9,621  |
+| 4 utterances most similar to the utterance, every word labelled                                           | 87.6 ‡      | 3,739  |
+| 8 most similar utterances                                                                                 | 89.5 ‡      | 4,474  |
+| The same, the question pointing at the examples                                                           | 90.3 §      | 4,616  |
+| The same, slot definitions once in the state instead of on every option                                   | 90.6 §      | 3,343  |
+| Both of those together (**the retrieved condition**)                                                      | 91.4 §      | 3,478  |
+| 8 most similar, slot options reversed or shuffled                                                         | 88.7–88.9 § | 4,481  |
+| 8 most similar, plus a yes/no per adjacent word pair to join words                                        | 88.8 §      | 5,297  |
+| 16 most similar utterances                                                                                | 89.4 ‡      | 5,981  |
+| 32 most similar utterances                                                                                | 89.6 ‡      | 9,048  |
+| 8 most similar utterances by embedding similarity (two models tried)                                      | 88.3–88.5 ‡ | 4,520  |
+| 8 most similar utterances, no descriptions                                                                | 89.0 ‡      | 3,059  |
+| 32 fixed utterances with every word labelled, no descriptions                                             | 84.7 ‡      | 7,834  |
+| Copy each word's label from the 8 most similar utterances, without Jev                                    | 72.0        | 0      |
+| **Per word, left to right**                                                                               |             |        |
+| Whole utterance, word bracketed, earlier labels shown                                                     | 34.9        | 4,874  |
+| Only the words so far, last word bracketed, earlier labels shown                                          | 45.3        | 4,756  |
+| Only the words so far, no bracket, `none` described                                                       | 47.0        | 4,680  |
+| The same, earlier labels shown                                                                            | 22.2        | 4,912  |
+| **Per slot, options are spans (the docs' patterns)**                                                      |             |        |
+| Extraction cookbook: sentence question, spans plus `none`                                                 | 75.5        | 5,084  |
+| The same, instructions as labelled fields                                                                 | 76.2        | 5,359  |
+| The same, asked only for slots a word-level question says are present                                     | 75.3        | ~4,000 |
+| Function-calling cookbook: `stated` yes/no plus a span question                                           | 66.7 †      | 4,970  |
+| **Per slot, options are words**                                                                           |             |        |
+| Top word only                                                                                             | 48.6        | 1,303  |
+| Top 3 words above 10% of the top probability, span from first to last                                     | 67.9        | 1,303  |
+| Top word as anchor, then a second question over spans containing it                                       | 61.3        | 2,890  |
+| **Combination**                                                                                           |             |        |
+| The benchmark's labels with the extraction cookbook's span boundaries                                     | 79.8 †      | 8,097  |
 
 † Scored on the second half of the dev set, where the benchmark formulation
 scores 77.8.
 
 ‡ Mean of the two halves of the dev set, where the benchmark formulation
 scores 76.5.
+
+§ Whole dev set, in runs where 8 most similar utterances scores 88.8 and 32
+fixed ones 84.4.
 
 What we learned, beyond the findings at the top:
 
@@ -269,6 +313,13 @@ What we learned, beyond the findings at the top:
   lower than whole slot values.
 - More than eight retrieved examples adds nothing, and embedding similarity
   is no better than shared words and word pairs for choosing them.
+- The order of the slot options does not matter: about 1% of words change
+  when it is reversed or shuffled, and averaging over orders gains nothing.
+- A yes/no about each adjacent pair of words ("part of the same name or
+  title?") is too unreliable to rebuild spans from.
+- Moving definitions into the state only helps when examples are there too.
+  Without examples it saves 38% of the tokens but loses frame accuracy, so
+  the descriptions condition keeps them on the options.
 - With examples, descriptions add about half a point; without examples they
   add 17.
 - The remaining errors are mostly small words inside names ("the", "of")

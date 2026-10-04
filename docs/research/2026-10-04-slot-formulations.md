@@ -7,8 +7,9 @@ Jev, with its score, including the ones that are not in the benchmark code.
 
 The benchmark ended up with token classification (formulation 6), examples
 shown with a label for every word (41), retrieved by TF-IDF similarity for
-the slot request (46) and for the intent request (57). On the test set that
-takes slot F1 from 59.7 with label names alone to 86.9.
+the slot request (46) and for the intent request (57), with the slot
+definitions in the state and the question pointing at the examples (65). On
+the test set that takes slot F1 from 59.7 with label names alone to 89.4.
 
 The path there, in the order it was walked:
 
@@ -22,12 +23,14 @@ The path there, in the order it was walked:
 | 32 fixed examples, every word labelled                              | 83.5         |
 | 8 examples retrieved by similarity, for the slot request            | 86.2         |
 | Retrieved examples for the intent request as well                   | 86.9         |
+| Slot definitions in the state, question pointing at the examples    | 89.4         |
 
 Things that were tried and did not help: feeding earlier labels back,
 hiding the words to the right, `what` / `not_for` rubrics, a `stated` yes/no
 per slot, reading the top few words of a per-slot question, repairing span
 boundaries after the fact, more than eight retrieved examples,
-deduplicating the retrieval pool, and embedding similarity.
+deduplicating the retrieval pool, embedding similarity, reordering the slot
+options, and a yes/no per adjacent word pair.
 
 The sections below are grouped by kind of formulation, not by date.
 
@@ -48,7 +51,7 @@ The sections below are grouped by kind of formulation, not by date.
   was run several times as the reference for later experiments: its two
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
-- The **benchmark** code contains formulations 6, 41, 46, and 57.
+- The **benchmark** code contains formulations 6, 57, 65, and 67.
   Everything else here was a throwaway script, except formulation 12, which
   was a second benchmark method until it was removed, and formulation 35,
   which was the first few-shot format.
@@ -355,6 +358,57 @@ utterance. Intent descriptions are kept. Dev set, 700 utterances.
 - Jev with examples beats both Jev alone and a vote among the examples (row
   59), so it is weighing them, not copying.
 
+### A full read of the Jev docs
+
+All 58 pages of the Jev documentation, and the vendor's agent skill, were
+read against the implementation. Most guidance was already followed. These
+are the ideas that were new, each tried on the whole dev set with 8
+retrieved examples (formulation 46) unless noted.
+
+| #   | Formulation                                                                                           | Dev slot F1 | All slots right | Tokens |
+| --- | ----------------------------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
+| 46  | 8 most similar utterances (re-run)                                                                    | 88.8        | 73%             | 4,481  |
+| 60  | Slot options in reversed order                                                                        | 88.9        | 73%             | 4,481  |
+| 61  | Slot options shuffled per utterance                                                                   | 88.9        | 73%             | 4,481  |
+| 62  | Probabilities averaged over four option orders                                                        | 88.8        | 73%             | 17,924 |
+| 63  | The question also says to label the word "the way matching words are labelled in `labelled_examples`" | 90.3        | 77%             | 4,616  |
+| 64  | Slot definitions once in the state under `slot_definitions`, options bare, question names that key    | 90.6        | 78%             | 3,343  |
+| 65  | **63 and 64 together**                                                                                | 91.4        | 80%             | 3,478  |
+| 66  | 65 without any slot definitions                                                                       | 89.6        | 75%             | 3,201  |
+| 67  | **65 with the 32 fixed examples** (41 re-run scores 84.4)                                             | 86.1        | 67%             | 8,395  |
+| 68  | 64 without examples (formulation 6 re-run scores 77.1, 50% all right)                                 | 76.4        | 46%             | 1,874  |
+| 69  | 46 plus a yes/no per adjacent word pair, joined words take the neighbour's slot                       | 88.8        | 73%             | 5,297  |
+
+- **65 and 67** are the benchmark's `retrieved` and `fewshot` slot requests.
+  Test, three runs each. Retrieved: 89.4 slot F1 (89.1–89.5) and 75.7 frame
+  accuracy (75.1–76.1), from 86.9 and 69.5, with slot input tokens down from
+  3.14M to 2.44M per run. Few-shot: 84.4 (84.4–84.5) and 64.8 (64.6–65.1),
+  from 83.5 and 61.9, with tokens down from 6.61M to 5.91M.
+- **Option order (60–62).** The docs list it as a failure mode and say to
+  reorder and check. About 1% of words get a different answer; no score
+  moves. The results do not depend on option order.
+- **Definitions in the state (64, 68).** The state is billed once per
+  request, and the docs put shared reference text there. With examples it is
+  both cheaper and more accurate. Without examples it is cheaper but loses
+  frame accuracy, so the `descriptions` condition keeps definitions on the
+  options.
+- **Word pairs (69).** Modelled on the docs' structure-recovery cookbook,
+  which asks a yes/no per adjacent pair of lines. The judgement is too
+  unreliable here: of 1,507 pairs that belong together it finds 1,381, but
+  it also joins 596 of the 4,100 that do not. No threshold beats leaving the
+  labels alone.
+- **The intent question** was tried with the same two changes: pointing at
+  the examples (10 wrong of 700, against 9) and definitions in the state
+  (7 wrong). Neither is outside the noise, so it is unchanged.
+- **Housekeeping from the docs:** the model is pinned to `jev-1.13.0`
+  instead of the `jev-latest` alias, which "moves when a new release ships",
+  and the question wording is collected in one place in `jev.py`.
+- **Not adopted:** the docs recommend one request with every question,
+  ignoring answers that do not apply. The slot request's options,
+  definitions, and examples depend on the predicted intent, which is the
+  exception the docs allow, and a single request would cost about seven
+  times the slot tokens.
+
 ### How similarity is measured
 
 Formulation 46 with a different similarity for choosing the 8 examples.
@@ -457,6 +511,10 @@ word that points to the work without naming it, or the kind of work."}`
   similarity to the utterance beat 64 chosen at random, at about a quarter
   of the tokens (rows 46 and 42), and descriptions become nearly redundant.
   This uses the whole training split as a retrieval pool.
+- **Tell the question what the state is for.** With examples and slot
+  definitions in the state, naming them in the question with backticks added
+  2.5 points of slot F1 and 6 of frame accuracy on test, and moving the
+  definitions there cut tokens by 22% (rows 63–65).
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.
@@ -485,7 +543,12 @@ word that points to the work without naming it, or the kind of work."}`
 
 ## Not tried
 
-- Chunk first (a yes/no per gap between words), then one `Choice` per chunk.
+- A beam over the top two or three intents, keeping the intent whose slot
+  answers are most confident (the docs' hierarchical-classification
+  cookbook does this for taxonomies).
+- Several wordings of the per-word question in one request, averaged.
+- A verification pass over decoded spans ("is this value incomplete?", "is
+  it the wrong field?"), as in the docs' extraction-cascade cookbook.
 - `what` / `not_for` rubrics on the span scheme, where sibling confusion is
   the main error. They were only tried on the token scheme.
 - `examples` in the option rubrics.

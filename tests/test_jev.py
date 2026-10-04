@@ -30,7 +30,7 @@ def test_intent_question_carries_descriptions_when_given() -> None:
 def test_token_questions_offer_the_intents_slots_plus_none() -> None:
     """Each token gets one question over the given slots and none."""
     slots = {"artist": None, "track": None}
-    questions = token_questions(("play", "abba"), "PlayMusic", slots, None)
+    questions = token_questions(("play", "abba"), "PlayMusic", slots, None, False)
     assert list(questions) == ["token_0", "token_1"]
     assert questions["token_0"].criteria == {
         "artist": None,
@@ -42,7 +42,7 @@ def test_token_questions_offer_the_intents_slots_plus_none() -> None:
 def test_token_questions_identify_a_word_by_the_words_around_it() -> None:
     """A repeated word is told apart by what comes before and after it."""
     questions = token_questions(
-        ("play", "the", "the"), "PlayMusic", {"artist": None}, None
+        ("play", "the", "the"), "PlayMusic", {"artist": None}, None, False
     )
     question = (
         "Which slot does `word` fill in `utterance`? Answer none if it fills no slot."
@@ -66,10 +66,34 @@ def test_token_questions_identify_a_word_by_the_words_around_it() -> None:
 def test_token_questions_carry_slot_descriptions_when_given() -> None:
     """A described slot passes its description as the option's criteria."""
     slots = {"artist": "The musician or band."}
-    questions = token_questions(("play", "abba"), "PlayMusic", slots, "Not a slot.")
+    questions = token_questions(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", False
+    )
     assert questions["token_1"].criteria == {
         "artist": "The musician or band.",
         "none": "Not a slot.",
+    }
+
+
+def test_token_questions_leave_definitions_to_the_state_when_examples_are_shown() -> (
+    None
+):
+    """With examples, options are bare and the question points at the state."""
+    slots = {"artist": "The musician or band."}
+    questions = token_questions(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", True
+    )
+    assert questions["token_1"].criteria == {"artist": None, "none": None}
+    assert questions["token_1"].instructions == {
+        "intent": "PlayMusic",
+        "words_before": "play",
+        "word": "abba",
+        "words_after": "",
+        "question": (
+            "Which slot does `word` fill in `utterance`? The slots are defined in "
+            "`slot_definitions`. Label it the way matching words are labelled in "
+            "`labelled_examples`. Answer none if it fills no slot."
+        ),
     }
 
 
