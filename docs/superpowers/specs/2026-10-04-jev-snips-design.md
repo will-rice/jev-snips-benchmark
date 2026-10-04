@@ -49,7 +49,7 @@ utterance is sent to the model.
 
 ### Package layout
 
-Rename `agent_harness` to `jev_snips` and delete the template's `Agent`,
+Rename `agent_harness` to `jevsnips` and delete the template's `Agent`,
 `Task`, `Harness`, and `Result`. They score one task to a float and convert
 exceptions into `score=0.0`; slot F1 is corpus-level and an API failure must
 stop the run instead of being recorded as a wrong answer.
