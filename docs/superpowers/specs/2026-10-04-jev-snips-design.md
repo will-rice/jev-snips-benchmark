@@ -34,8 +34,11 @@ predictions saved for later analysis.
 
 In scope: zero-shot evaluation of Jev on the SNIPS test split.
 
-Out of scope: label descriptions, few-shot examples, the candidate-span
-extraction scheme, gold-intent (oracle) slot filling, and baselines. Each
+In scope: two slot-filling schemes compared under otherwise identical
+conditions (see Questions).
+
+Out of scope: label descriptions, few-shot examples, gold-intent (oracle)
+slot filling, and baselines. Each
 would be a separate ablation; any prompt development for them must use train,
 never test.
 
@@ -51,12 +54,12 @@ Rename `agent_harness` to `jev_snips` and delete the template's `Agent`,
 exceptions into `score=0.0`; slot F1 is corpus-level and an API failure must
 stop the run instead of being recorded as a wrong answer.
 
-| Module           | Responsibility                                                         |
-| ---------------- | ---------------------------------------------------------------------- |
-| `config.py`      | Constants: `MODEL`, `MAX_WORKERS`, `SPLIT`, `DATASET_REPO`, `NONE`     |
-| `data.py`        | Download and parse a split and the label files                         |
-| `jev.py`         | Build questions for one utterance, call Jev, decode answers            |
-| `metrics.py`     | Intent accuracy, slot F1, semantic-frame accuracy                      |
+| Module           | Responsibility                                                        |
+| ---------------- | --------------------------------------------------------------------- |
+| `config.py`      | Constants: `MODEL`, `MAX_WORKERS`, `SPLIT`, `DATASET_REPO`, `NONE`    |
+| `data.py`        | Download and parse a split and the label files                        |
+| `jev.py`         | Build questions for one utterance, call Jev, decode both slot schemes |
+| `metrics.py`     | Intent accuracy, slot F1, semantic-frame accuracy                     |
 | `scripts/run.py` | Entry point: load, predict concurrently, save predictions, score, log |
 
 ### Data
@@ -77,40 +80,65 @@ only, so the alignment check applies to the evaluated split.
 
 ### Questions
 
-Two requests per utterance, both with the utterance text as `state`.
+Three requests per utterance, all with the utterance text as `state`: one for
+the intent, then one per slot scheme. Both schemes are conditioned on the same
+predicted intent, so they differ only in how slots are asked and decoded.
 
 1. Intent: one `Choice` named `intent` whose options are the 7 intent names.
-2. Slots, given the predicted intent: one `Choice` named `token_{i}` per
-   token index `i`, whose options are that intent's slot types plus `none`.
-   The instructions name the intent and show the utterance with token `i` in
+2. Token scheme: one `Choice` named `token_{i}` per token index `i`, whose
+   options are the predicted intent's slot types plus `none`. The
+   instructions name the intent and show the utterance with token `i` in
    brackets, for example `add sabrina [salerno] to the grime instrumentals
-   playlist`, so repeated words are unambiguous.
+playlist`, so repeated words are unambiguous.
+3. Span scheme: one `Choice` per slot type of the predicted intent, named
+   after the slot type, asking which span of the utterance fills that slot.
+   The options are the texts of the utterance's contiguous word spans plus
+   `none`.
+
+Span options are deduplicated by text, and a text refers to its first
+occurrence in the utterance. A `Choice` takes at most 255 options, so span
+length is capped per utterance at the largest length whose spans plus `none`
+fit. Utterances of up to 21 tokens offer every span; the longest test
+utterance (24 tokens) offers spans of up to 14 words, above the longest gold
+span in test (10 words).
 
 Slots are conditioned on the predicted intent, never the gold intent, so no
 label leaks into the slot or frame metrics. An intent error therefore offers
 the wrong slot options and usually costs the slots too, which is how a real
 pipeline behaves.
 
-All option descriptions are `None`: the model sees label names only. This is
-the zero-shot condition and nothing is tuned against the test set.
+All option descriptions are `None`: the model sees label names and span texts
+only. This is the zero-shot condition and nothing is tuned against the test
+set.
 
 ### Decoding
 
-- Intent: the `choice` of the `intent` answer.
-- Slots: the `choice` of each token answer. `none` becomes `O`. Otherwise a
-  token gets `B-type` if the previous token's type differs and `I-type` if it
-  is the same.
+Intent is the `choice` of the `intent` answer.
 
-Merging adjacent equal types cannot represent two back-to-back spans of the
-same type. That never occurs in the test split, so it costs nothing here.
+Token scheme: take the `choice` of each token answer. `none` becomes `O`.
+Otherwise a token gets `B-type` if the previous token's type differs and
+`I-type` if it is the same.
+
+Span scheme: each slot type whose `choice` is not `none` proposes one span.
+Proposals are accepted in descending order of the chosen option's
+probability, skipping any that overlaps an accepted span. Accepted spans are
+written as `B-type I-type ...`; all other tokens are `O`.
+
+Known ceilings, all measured on the test split:
+
+| Limitation                                                    | Scheme | Gold spans affected |
+| ------------------------------------------------------------- | ------ | ------------------- |
+| Two adjacent spans of the same type merge into one            | Token  | 0 of 1790           |
+| A slot type can fill only one span per utterance              | Span   | 0 of 1790           |
+| A span whose text also occurs earlier resolves to the earlier | Span   | 1 of 1790           |
 
 ### Metrics
 
 - Intent accuracy: fraction of utterances with the correct intent.
 - Slot F1: span-level micro F1 from `seqeval`, the conlleval-equivalent used
-  in the SNIPS literature.
+  in the SNIPS literature, reported per scheme.
 - Semantic-frame accuracy: fraction of utterances with the correct intent and
-  an exactly matching tag sequence.
+  an exactly matching tag sequence, reported per scheme.
 
 ### Run
 
@@ -118,9 +146,10 @@ same type. That never occurs in the test split, so it costs nothing here.
 prediction function over the split with a `ThreadPoolExecutor` and `tqdm`.
 
 Output is `results/{split}.jsonl`, one record per utterance: tokens, gold
-intent and tags, predicted intent and tags, per-question probabilities, token
-usage summed over both requests, and the model version the API returned. Metrics, token totals, and the
-returned model version are logged to wandb and with `logging.info`.
+intent and tags, predicted intent, and for each scheme the predicted tags,
+per-question probabilities, and token usage, plus the model version the API
+returned. Metrics, token totals per scheme, and the returned model version
+are logged to wandb and with `logging.info`.
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
 smoke run. `results/` is git-ignored.
@@ -135,11 +164,15 @@ repeat, so there is no resume logic.
 
 pytest, functional style, no mocks:
 
-- Question building: the intent question lists the 7 intents; the slot
-  questions give one question per token, offering only the given intent's
-  slot types plus `none`, with the bracketed token in the instructions.
-- Decoding: single-token spans, multi-token runs, `none`, and a type change
-  between adjacent tokens.
+- Question building: the intent question lists the 7 intents. The token
+  scheme gives one question per token, offering only the given intent's slot
+  types plus `none`, with the bracketed token in the instructions. The span
+  scheme gives one question per slot type of the intent, with deduplicated
+  span texts plus `none`, and never more than 255 options.
+- Token decoding: single-token spans, multi-token runs, `none`, and a type
+  change between adjacent tokens.
+- Span decoding: a multi-word span, `none`, and two overlapping proposals
+  where the higher-probability one wins.
 - Metrics: hand-built gold and predicted sequences with known scores.
 - Data: the real test file parses to 700 aligned rows with 7 intents, and
   the schema derived from train covers every gold slot type in test for its
