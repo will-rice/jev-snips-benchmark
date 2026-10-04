@@ -75,7 +75,7 @@ rows fail at construction and the JSONL output has one schema.
   A validator on `Prediction` requires each scheme's `tags` to match the
   utterance length.
 - `Prediction`: the saved record: the `Utterance`, `intent` (predicted),
-  `intent_probabilities`, `token` and `span` (`SlotPrediction` each), and
+  `intent_probabilities`, `intent_input_tokens`, `token` and `span` (`SlotPrediction` each), and
   `model` (the version the API returned).
 
 Records are written with `model_dump_json` and can be reloaded with
@@ -87,15 +87,15 @@ Records are written with `model_dump_json` and can be reloaded with
 `Utterance`: tokens (`input.split()`), an intent, and gold BIO tags
 (`slots.split()`).
 
-The intent inventory comes from `intent_labels.txt`, dropping `PAD` and
-`UNK`.
-
 The slot schema maps each intent to the slot types that occur with it in the
 train split, read from the `intent` and `slots` columns with the `B-`/`I-`
 prefix removed. This is the assistant's schema (which slots an intent
 accepts), the same information a deployed NLU system is configured with.
 Train has one row whose token and tag counts differ; the schema reads tags
 only, so the alignment check applies to the evaluated split.
+
+The intent inventory is the schema's keys. The dataset is pinned to a commit
+so the benchmark is reproducible.
 
 ### Questions
 
@@ -117,7 +117,7 @@ playlist`, so repeated words are unambiguous.
 Span options are deduplicated by text, and a text refers to its first
 occurrence in the utterance. A `Choice` takes at most 255 options, so span
 length is capped per utterance at the largest length whose spans plus `none`
-fit. Utterances of up to 21 tokens offer every span; the longest test
+fit. Utterances of up to 22 tokens offer every span; the longest test
 utterance (24 tokens) offers spans of up to 14 words, above the longest gold
 span in test (10 words).
 
@@ -176,6 +176,24 @@ smoke run. `results/` is git-ignored.
 No fallbacks. SDK retries handle rate limits; any other API error, a missing
 key, or a misaligned row raises and stops the run. A run is cheap enough to
 repeat, so there is no resume logic.
+
+### Probe results
+
+One 24-token `BookRestaurant` utterance was sent to `jev-latest` before
+planning. The API returned model `jev-1.13.0`. All 14 span questions with 246
+options each fit in one request (45,400 input tokens, 0.5 s); the token
+scheme used 4,436 input tokens and the intent question 375. Each answer's
+`probabilities` is keyed by option name and includes the chosen option.
+
+A token equal to the `none` option would collide with it in the span scheme.
+No test utterance contains one, and building span options for such an
+utterance raises.
+
+## Documentation
+
+`README.md` is rewritten for this project: what is measured, the results
+table, the method for both schemes, setup, usage, the output format, and the
+known limitations.
 
 ## Testing
 
