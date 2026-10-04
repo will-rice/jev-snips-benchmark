@@ -31,10 +31,7 @@ def main() -> None:
     parser.add_argument(
         "condition",
         choices=get_args(Condition),
-        help=(
-            "Names only, descriptions, fixed examples, retrieved examples, or "
-            "one of the two patterns from the Jev docs."
-        ),
+        help="Names only, descriptions, fixed examples, or retrieved examples.",
     )
     parser.add_argument(
         "--limit", type=int, help="Evaluate only the first N utterances."
