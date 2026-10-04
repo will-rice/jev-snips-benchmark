@@ -130,26 +130,31 @@ the training split, with descriptions and the gold intent, so they compare
 with each other and not with the test table above. Tokens are mean input
 tokens per utterance.
 
-| Formulation                                                              | Dev slot F1 | Tokens |
-| ------------------------------------------------------------------------ | ----------- | ------ |
-| **Per word, options are slot types**                                     |             |        |
-| Word marked with brackets in a sentence, `none` undescribed              | 31.9        | 2,445  |
-| The same, `none` described                                               | 60.0        | 2,734  |
-| The same, short gaps inside a slot filled                                | 67.9        | 2,734  |
-| Word and context as labelled fields, `none` described (**token scheme**) | **76.4**    | 3,013  |
-| **Per word, left to right**                                              |             |        |
-| Whole utterance, word bracketed, earlier labels shown                    | 34.9        | 4,874  |
-| Only the words so far, last word bracketed, earlier labels shown         | 45.3        | 4,756  |
-| Only the words so far, no bracket, `none` described                      | 47.0        | 4,680  |
-| The same, earlier labels shown                                           | 22.2        | 4,912  |
-| **Per slot, options are spans**                                          |             |        |
-| Sentence question (**span scheme**)                                      | 75.5        | 5,084  |
-| Instructions as labelled fields                                          | 76.2        | 5,359  |
-| Asked only for slots a word-level question says are present              | 75.3        | ~4,000 |
-| **Per slot, options are words**                                          |             |        |
-| Top word only                                                            | 48.6        | 1,303  |
-| Top 3 words above 10% of the top probability, span from first to last    | 67.9        | 1,303  |
-| Top word as anchor, then a second question over spans containing it      | 61.3        | 2,890  |
+| Formulation                                                               | Dev slot F1 | Tokens |
+| ------------------------------------------------------------------------- | ----------- | ------ |
+| **Per word, options are slot types**                                      |             |        |
+| Word marked with brackets in a sentence, `none` undescribed               | 31.9        | 2,445  |
+| The same, `none` described                                                | 60.0        | 2,734  |
+| The same, short gaps inside a slot filled                                 | 67.9        | 2,734  |
+| Word and context as labelled fields, `none` described (**token scheme**)  | **76.4**    | 3,013  |
+| The token scheme with `what` / `not_for` option rubrics for sibling slots | 77.1 †      | 4,354  |
+| The same, plus "every word of a title counts" and a rubric for `none`     | 75.8 †      | 5,128  |
+| **Per word, left to right**                                               |             |        |
+| Whole utterance, word bracketed, earlier labels shown                     | 34.9        | 4,874  |
+| Only the words so far, last word bracketed, earlier labels shown          | 45.3        | 4,756  |
+| Only the words so far, no bracket, `none` described                       | 47.0        | 4,680  |
+| The same, earlier labels shown                                            | 22.2        | 4,912  |
+| **Per slot, options are spans**                                           |             |        |
+| Sentence question (**span scheme**)                                       | 75.5        | 5,084  |
+| Instructions as labelled fields                                           | 76.2        | 5,359  |
+| Asked only for slots a word-level question says are present               | 75.3        | ~4,000 |
+| **Per slot, options are words**                                           |             |        |
+| Top word only                                                             | 48.6        | 1,303  |
+| Top 3 words above 10% of the top probability, span from first to last     | 67.9        | 1,303  |
+| Top word as anchor, then a second question over spans containing it       | 61.3        | 2,890  |
+
+† Scored on the second half of the dev set, where the token scheme itself
+scores 77.8.
 
 What we learned:
 
@@ -160,6 +165,8 @@ What we learned:
 - Marking a word with brackets inside a sentence is a poor way to point at
   it. Labelled fields gained 8.5 points on the same question.
 - Showing earlier labels, or hiding the words to the right, did not help.
+- `what` / `not_for` rubrics did not help the token scheme: its main error
+  is small words inside titles labelled `none`, not sibling slots.
 - A question over words finds where a slot is (the top word is inside the
   gold span 92% of the time) but not how far it extends. It is the cheapest
   formulation by a wide margin.
