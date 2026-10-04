@@ -17,7 +17,7 @@ condition, with the range across runs in brackets.
 
 | Condition    | What Jev is shown                              | Intent accuracy  | Slot F1          | Frame accuracy   |
 | ------------ | ---------------------------------------------- | ---------------- | ---------------- | ---------------- |
-| Names        | Label names                                    | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
+| Names        | Label names                                    | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.0 (29.9–30.3) |
 | Descriptions | Names and one-sentence descriptions            | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
 | Few-shot     | Descriptions and 32 fixed examples per intent  | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
 | Retrieved    | Descriptions and the 8 most similar examples   | 96.1 (96.1–96.1) | 86.9 (86.7–87.2) | 69.5 (69.0–70.4) |
