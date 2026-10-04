@@ -43,9 +43,11 @@ What the numbers say:
   `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
   41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
 - **Choosing examples by similarity beats a fixed sample, for half the
-  tokens.** Showing the 8 training utterances most like the one being
-  labelled scores 86.9 slot F1 against 83.5 for 32 fixed ones, and gets 70%
-  of utterances entirely right against 62%. It draws on all 12,833 distinct
+  tokens.** With the intent question unchanged, showing the slot request
+  the 8 training utterances most like the one being labelled scored 86.2
+  slot F1 against 83.5 for 32 fixed ones, and got 68% of utterances entirely
+  right against 62%. (The retrieved row above is higher, 86.9 and 69.5,
+  because it also retrieves examples for the intent.) It draws on all 12,833 distinct
   training utterances, though, where few-shot uses 224. SNIPS utterances
   are templated, so 12% of test utterances retrieve an example that differs
   from them by one word. Jev is still doing more than looking labels up:
@@ -74,7 +76,8 @@ What the numbers say:
   `entity_name` (50), `movie_name` (54), `object_name` (61), `track` (64).
 
 Jev's slot answers are not identical between runs, which is why each
-condition is run three times. The ranges above are under one point.
+condition is run three times. The ranges above are at most a point and a
+half.
 
 For reference, a supervised model fine-tuned on the full training split,
 [Joint BERT](https://arxiv.org/abs/1902.10909) (Chen et al., 2019), reports
@@ -279,8 +282,9 @@ What we learned:
   more again (about as much as 16 example values per option) and is the
   most accurate.
 - Similarity by shared words and word pairs is as good as embedding
-  similarity here, and needs no model. Retrieval is already limited to one
-  intent, so what matters is the wording around the slot.
+  similarity here, and needs no model. Retrieval for the slot request is
+  already limited to one intent, so what matters is the wording around the
+  slot. Embeddings were not tried for the intent request.
 - Which examples matters more than how many. Eight chosen by similarity
   beat 64 chosen at random, and more than eight adds nothing.
 - With examples, descriptions add about half a point; without examples they

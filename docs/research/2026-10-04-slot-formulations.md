@@ -308,10 +308,17 @@ utterance. Intent descriptions are kept. Dev set, 700 utterances.
   frame accuracy 69.5 (69.0–70.4) against 68.2. Intent input tokens rise
   from 336,703 to 524,801 per run.
 - The dev set overstated the gain again: 2.6 points there, 1.0 on test.
-- The intent errors left on test are between three intents that overlap in
-  meaning: `SearchScreeningEvent` read as `SearchCreativeWork` (10),
-  `SearchCreativeWork` read as `PlayMusic` (8) or as `SearchScreeningEvent`
-  (6).
+- Of the 27 intent errors left on test, 26 are among three intents that
+  overlap in meaning: `SearchScreeningEvent` read as `SearchCreativeWork`
+  (10), `SearchCreativeWork` read as `PlayMusic` (8) or as
+  `SearchScreeningEvent` (6), and `PlayMusic` read as `SearchCreativeWork`
+  (2).
+- How much the examples give away, on test: 88% of the retrieved examples
+  carry the utterance's gold intent, and for 66% of utterances all 8 share
+  one intent (the gold one in all but 3 cases). A majority vote among the 8
+  is right for 93.6% of utterances. Where the majority was wrong (45
+  utterances), Jev was still right in 26. No retrieved example is a test
+  utterance; 12% of utterances retrieve one that differs by a single word.
 - Jev with examples beats both Jev alone and a vote among the examples (row
   59), so it is weighing them, not copying.
 
@@ -332,8 +339,9 @@ deduplicated. Both dev halves are shown, since the differences are small.
 - Embedding similarity is about a point below TF-IDF, which is close to the
   noise on this dev set. It is not better, and it would add a model download
   and a PyTorch dependency, so it was not adopted or run on test.
-- Retrieval is already restricted to one intent, so candidates share a
-  topic. What makes an example useful is the wording around the slot, which
+- Retrieval for the slot request is already restricted to one intent, so
+  candidates share a topic. Embeddings were not tried for the intent
+  request, which retrieves across intents. What makes an example useful is the wording around the slot, which
   word-pair overlap matches directly.
 
 ### One question per slot, options are words
