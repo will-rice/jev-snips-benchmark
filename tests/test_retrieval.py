@@ -64,3 +64,12 @@ def test_retrieve_never_returns_the_same_text_twice() -> None:
         "play some jazz",
         "play some rock",
     ]
+
+
+def test_the_first_copy_of_a_repeated_text_supplies_its_labels() -> None:
+    """When copies of a text disagree on labels, the first one is shown."""
+    tokens = ("play", "jazz")
+    first = Utterance(tokens=tokens, intent="PlayMusic", tags=("O", "B-genre"))
+    second = Utterance(tokens=tokens, intent="PlayMusic", tags=("O", "B-playlist"))
+    index = build_index({"PlayMusic": [first, second]})
+    assert retrieve(index, "PlayMusic", tokens, 2) == [first]

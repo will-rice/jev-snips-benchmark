@@ -280,7 +280,9 @@ dev halves.
   distinct examples. On test, three runs each: 86.2 slot F1 before
   (86.1–86.3) and after (85.9–86.5), frame accuracy 68.0 before and 68.2
   after. The benchmark keeps the deduplicated index, since it is what "the
-  8 most similar" should mean.
+  8 most similar" should mean. One repeated text has copies with different
+  labels; the first copy's labels are the ones shown. The dev-set rows above
+  were measured before this change.
 
 ### One question per slot, options are words
 
