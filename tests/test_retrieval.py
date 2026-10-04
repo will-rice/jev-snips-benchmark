@@ -3,7 +3,7 @@
 from jevsnips.config import RETRIEVED_EXAMPLES
 from jevsnips.data import load_example_pool, load_utterances
 from jevsnips.models import Utterance
-from jevsnips.retrieval import build_index, retrieve
+from jevsnips.retrieval import ALL_INTENTS, build_index, retrieve
 
 
 def utterance(text: str, intent: str = "PlayMusic") -> Utterance:
@@ -73,3 +73,16 @@ def test_the_first_copy_of_a_repeated_text_supplies_its_labels() -> None:
     second = Utterance(tokens=tokens, intent="PlayMusic", tags=("O", "B-playlist"))
     index = build_index({"PlayMusic": [first, second]})
     assert retrieve(index, "PlayMusic", tokens, 2) == [first]
+
+
+def test_retrieve_across_all_intents_when_the_intent_is_not_known() -> None:
+    """Examples for the intent question come from every intent's pool."""
+    pool = {
+        "PlayMusic": [utterance("play jazz"), utterance("play the radio")],
+        "RateBook": [utterance("rate jazz five stars", "RateBook")],
+    }
+    found = retrieve(build_index(pool), ALL_INTENTS, ("rate", "jazz"), 2)
+    assert [(example.intent, " ".join(example.tokens)) for example in found] == [
+        ("RateBook", "rate jazz five stars"),
+        ("PlayMusic", "play jazz"),
+    ]

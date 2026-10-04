@@ -250,6 +250,11 @@ appear in the evaluated split. `load_examples()` samples the fixed few-shot
 set from the same pool. The retrieval index holds only the first copy of
 each repeated text, so the examples retrieved for an utterance are distinct.
 
+Under `retrieved` the intent request also shows examples: the 8 most similar
+training utterances across all intents (the index's `ALL_INTENTS` entry),
+each as its text and intent, in a `labelled_examples` list beside the
+utterance. The other conditions' intent request is unchanged.
+
 ## Snips-style parse
 
 Each `Prediction` has a computed `parse`: the predicted intent with its

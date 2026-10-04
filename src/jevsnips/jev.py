@@ -11,7 +11,7 @@ from jevsnips.descriptions import (
     SLOT_DESCRIPTIONS,
 )
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
-from jevsnips.retrieval import ExampleIndex, retrieve
+from jevsnips.retrieval import ALL_INTENTS, ExampleIndex, retrieve
 
 
 def predict(
@@ -29,7 +29,8 @@ def predict(
     and slot is offered with its definition. Under fewshot the slot request
     also shows a fixed sample of labelled training utterances of the
     predicted intent; under retrieved it shows the ones most similar to the
-    utterance instead.
+    utterance instead, and the intent request shows the most similar
+    training utterances of any intent with their intents.
 
     Args:
         client: An open TypeSafe client.
@@ -49,8 +50,17 @@ def predict(
     intents = {
         name: INTENT_DESCRIPTIONS[name] if described else None for name in schema
     }
+    retrieving = condition == "retrieved"
+    intent_state: JSONValue = state
+    if retrieving:
+        intent_state = {
+            "utterance": state,
+            "labelled_examples": intent_examples(
+                retrieve(index, ALL_INTENTS, tokens, RETRIEVED_EXAMPLES)
+            ),
+        }
     intent_response = client.system_one(
-        state, {"intent": intent_question(intents)}, model=MODEL
+        intent_state, {"intent": intent_question(intents, retrieving)}, model=MODEL
     )
     intent = intent_response.choices["intent"]
     slots = {
@@ -61,7 +71,7 @@ def predict(
     slot_state: dict[str, JSONValue] = {"utterance": state}
     if condition == "fewshot":
         slot_state["labelled_examples"] = labelled_examples(examples[intent.choice])
-    if condition == "retrieved":
+    if retrieving:
         slot_state["labelled_examples"] = labelled_examples(
             retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
         )
@@ -95,16 +105,30 @@ def predict(
     )
 
 
-def intent_question(intents: Mapping[str, str | None]) -> Choice:
+def intent_question(intents: Mapping[str, str | None], keyed: bool) -> Choice:
     """Build the question that picks one intent.
 
     Args:
         intents: Each intent name with its description, or None for name only.
+        keyed: Whether the state is an object holding the utterance under an
+            `utterance` key, as it is when examples are shown beside it.
     """
     return Choice(
-        instructions="What is the intent of the utterance?",
+        instructions=(
+            "What is the intent of `utterance`?"
+            if keyed
+            else "What is the intent of the utterance?"
+        ),
         criteria=dict(intents),
     )
+
+
+def intent_examples(utterances: Sequence[Utterance]) -> list[JSONValue]:
+    """Show each utterance with its intent."""
+    return [
+        {"utterance": " ".join(utterance.tokens), "intent": utterance.intent}
+        for utterance in utterances
+    ]
 
 
 def token_questions(

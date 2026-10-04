@@ -6,6 +6,7 @@ from typesafe_sdk import SystemOneResponse, Usage
 from jevsnips.jev import (
     decode_tokens,
     input_tokens,
+    intent_examples,
     intent_question,
     labelled_examples,
     token_questions,
@@ -15,13 +16,14 @@ from jevsnips.models import Utterance
 
 def test_intent_question_offers_each_intent_without_descriptions() -> None:
     """The intent question is zero-shot: names only."""
-    question = intent_question({"PlayMusic": None, "RateBook": None})
+    question = intent_question({"PlayMusic": None, "RateBook": None}, False)
     assert question.criteria == {"PlayMusic": None, "RateBook": None}
+    assert question.instructions == "What is the intent of the utterance?"
 
 
 def test_intent_question_carries_descriptions_when_given() -> None:
     """A described intent passes its description as the option's criteria."""
-    question = intent_question({"PlayMusic": "Play music."})
+    question = intent_question({"PlayMusic": "Play music."}, False)
     assert question.criteria == {"PlayMusic": "Play music."}
 
 
@@ -138,4 +140,20 @@ def test_labelled_examples_label_every_word_of_each_utterance() -> None:
                 {"word": "abba", "slot": "artist"},
             ],
         }
+    ]
+
+
+def test_intent_question_refers_to_the_utterance_key_when_examples_are_shown() -> None:
+    """With examples in the state, the question names the field to judge."""
+    question = intent_question({"PlayMusic": None}, True)
+    assert question.instructions == "What is the intent of `utterance`?"
+
+
+def test_intent_examples_pair_each_utterance_with_its_intent() -> None:
+    """An intent example is the utterance text and its intent, without slots."""
+    example = Utterance(
+        tokens=("play", "abba"), intent="PlayMusic", tags=("O", "B-artist")
+    )
+    assert intent_examples([example]) == [
+        {"utterance": "play abba", "intent": "PlayMusic"}
     ]

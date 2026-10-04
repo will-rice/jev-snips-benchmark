@@ -9,16 +9,20 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from jevsnips.models import Utterance
 
 ExampleIndex = dict[str, tuple[TfidfVectorizer, spmatrix, Sequence[Utterance]]]
+ALL_INTENTS = "*"
 
 
 def build_index(pool: Mapping[str, Sequence[Utterance]]) -> ExampleIndex:
     """Index each intent's examples by the TF-IDF of their words and word pairs.
 
-    SNIPS repeats some training utterances. Only the first copy of a text is
-    indexed, so retrieval never spends two example slots on the same text.
+    A further index under ALL_INTENTS covers every example, for choosing
+    examples before the intent is known. SNIPS repeats some training
+    utterances. Only the first copy of a text is indexed, so retrieval never
+    spends two example slots on the same text.
     """
+    everything = [example for examples in pool.values() for example in examples]
     index: ExampleIndex = {}
-    for intent, examples in pool.items():
+    for intent, examples in {**pool, ALL_INTENTS: everything}.items():
         first_by_text: dict[tuple[str, ...], Utterance] = {}
         for example in examples:
             first_by_text.setdefault(example.tokens, example)
@@ -33,6 +37,8 @@ def retrieve(
     index: ExampleIndex, intent: str, tokens: Sequence[str], count: int
 ) -> list[Utterance]:
     """Return an intent's examples most similar to the utterance, best first.
+
+    Pass ALL_INTENTS as the intent to search every intent's examples.
 
     Similarity is the cosine between TF-IDF vectors, which are unit length,
     so it is their dot product.

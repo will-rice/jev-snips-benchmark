@@ -256,9 +256,11 @@ dev halves.
 | 50  | 32 fixed utterances, no descriptions                                          | 84.7        | 63%             | 7,834  |
 | 51  | No Jev: copy each word's most common label from the 8 most similar utterances | 72.0        | 29%             | 0      |
 
-- **46** is the benchmark's `retrieved` condition. Test, three runs with the
-  predicted intent: 86.2 slot F1 (85.9–86.5), 68.2 frame accuracy
-  (67.9–68.6), 3.14M slot input tokens per run. The pool on test is the
+- **46** is the slot half of the benchmark's `retrieved` condition. Test,
+  three runs with the intent predicted from descriptions alone: 86.2 slot F1
+  (85.9–86.5), 68.2 frame accuracy (67.9–68.6), 3.14M slot input tokens per
+  run. With retrieved examples for the intent as well (row 57), it is 86.9
+  and 69.5. The pool on test is the
   12,833 distinct aligned training utterances whose text is not a test
   utterance.
 - The test gain over fixed few-shot is 2.7 points; the dev set predicted
@@ -283,6 +285,35 @@ dev halves.
   8 most similar" should mean. One repeated text has copies with different
   labels; the first copy's labels are the ones shown. The dev-set rows above
   were measured before this change.
+
+### Retrieved examples for the intent
+
+Every change above was to the slot request. The intent request was the
+zero-shot one in all conditions. This shows it examples too: the `k`
+training utterances most similar to the utterance, from all intents, each as
+`{"utterance", "intent"}`, in a `labelled_examples` list beside the
+utterance. Intent descriptions are kept. Dev set, 700 utterances.
+
+| #   | Intent question                                      | Dev intent accuracy | Wrong | Tokens |
+| --- | ---------------------------------------------------- | ------------------- | ----- | ------ |
+| 55  | Descriptions only (all conditions until now)         | 96.1                | 27    | 481    |
+| 56  | Descriptions and the 4 most similar utterances       | 98.7                | 9     | 623    |
+| 57  | **Descriptions and the 8 most similar utterances**   | 98.7                | 9     | 750    |
+| 58  | Descriptions and the 16 most similar utterances      | 98.7                | 9     | 1,006  |
+| 59  | No Jev: the most common intent of the 8 most similar | 93.7                | 44    | 0      |
+
+- **57** is now part of the benchmark's `retrieved` condition. Test, three
+  runs: intent accuracy 96.1 (27 wrong of 700, identical in all three runs)
+  against 95.1 without examples; slot F1 86.9 (86.7–87.2) against 86.2;
+  frame accuracy 69.5 (69.0–70.4) against 68.2. Intent input tokens rise
+  from 336,703 to 524,801 per run.
+- The dev set overstated the gain again: 2.6 points there, 1.0 on test.
+- The intent errors left on test are between three intents that overlap in
+  meaning: `SearchScreeningEvent` read as `SearchCreativeWork` (10),
+  `SearchCreativeWork` read as `PlayMusic` (8) or as `SearchScreeningEvent`
+  (6).
+- Jev with examples beats both Jev alone and a vote among the examples (row
+  59), so it is weighing them, not copying.
 
 ### How similarity is measured
 
