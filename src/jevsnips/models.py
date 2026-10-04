@@ -2,7 +2,9 @@
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
+from pydantic.alias_generators import to_camel
+from seqeval.metrics.sequence_labeling import get_entities
 
 Condition = Literal["names", "descriptions"]
 
@@ -30,6 +32,36 @@ class SlotPrediction(BaseModel, frozen=True):
     input_tokens: int
 
 
+class ParsedIntent(BaseModel, frozen=True):
+    """The predicted intent in the Snips NLU result shape."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    intent_name: str
+    probability: float
+
+
+class ParsedSlot(BaseModel, frozen=True):
+    """One filled slot in the Snips NLU result shape.
+
+    SNIPS labels each slot value with a single name, so the entity is the
+    slot name, and the value is the utterance text, not a resolved value.
+    """
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+    value: str
+    entity: str
+    slot_name: str
+
+
+class Parse(BaseModel, frozen=True):
+    """An utterance's intent and slots in the Snips NLU result shape."""
+
+    intent: ParsedIntent
+    slots: tuple[ParsedSlot, ...]
+
+
 class Prediction(BaseModel, frozen=True):
     """The saved record for one utterance."""
 
@@ -41,6 +73,25 @@ class Prediction(BaseModel, frozen=True):
     token: SlotPrediction
     span: SlotPrediction
     model: str
+
+    @computed_field
+    @property
+    def parse(self) -> Parse:
+        """The predicted intent and the token scheme's slots as a parse."""
+        return Parse(
+            intent=ParsedIntent(
+                intent_name=self.intent,
+                probability=self.intent_probabilities[self.intent],
+            ),
+            slots=tuple(
+                ParsedSlot(
+                    value=" ".join(self.utterance.tokens[start : end + 1]),
+                    entity=slot,
+                    slot_name=slot,
+                )
+                for slot, start, end in get_entities(list(self.token.tags))
+            ),
+        )
 
     @model_validator(mode="after")
     def check_tag_lengths(self) -> Self:

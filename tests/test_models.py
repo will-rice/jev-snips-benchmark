@@ -53,3 +53,26 @@ def test_prediction_survives_a_json_round_trip() -> None:
         model="jev-1.13.0",
     )
     assert Prediction.model_validate_json(prediction.model_dump_json()) == prediction
+
+
+def test_prediction_parse_is_a_snips_style_result() -> None:
+    """A record carries the intent and slot values in the Snips NLU shape."""
+    tokens = ("weather", "in", "new", "york", "tonight")
+    tags = ("O", "O", "B-city", "I-city", "B-timeRange")
+    prediction = Prediction(
+        utterance=Utterance(tokens=tokens, intent="GetWeather", tags=tags),
+        condition="descriptions",
+        intent="GetWeather",
+        intent_probabilities={"GetWeather": 0.95, "PlayMusic": 0.05},
+        intent_input_tokens=1,
+        token=SlotPrediction(tags=tags, probabilities={}, input_tokens=1),
+        span=SlotPrediction(tags=("O",) * 5, probabilities={}, input_tokens=1),
+        model="jev-1.13.0",
+    )
+    assert prediction.model_dump(mode="json", by_alias=True)["parse"] == {
+        "intent": {"intentName": "GetWeather", "probability": 0.95},
+        "slots": [
+            {"value": "new york", "entity": "city", "slotName": "city"},
+            {"value": "tonight", "entity": "timeRange", "slotName": "timeRange"},
+        ],
+    }

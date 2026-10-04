@@ -49,7 +49,8 @@ def main() -> None:
             )
             path.write_text(
                 "".join(
-                    prediction.model_dump_json() + "\n" for prediction in predictions
+                    prediction.model_dump_json(by_alias=True) + "\n"
+                    for prediction in predictions
                 )
             )
             versions = sorted({prediction.model for prediction in predictions})

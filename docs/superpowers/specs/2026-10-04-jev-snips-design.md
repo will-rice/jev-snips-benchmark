@@ -214,6 +214,14 @@ descriptions condition the `none` option carries a description. Decoding
 fills up to `MAX_GAP = 2` unlabelled words between two words of the same
 type. This supersedes the bracketed-sentence question described above.
 
+## Snips-style parse
+
+Each `Prediction` has a computed `parse`: the predicted intent with its
+probability and the token scheme's slots, in the shape of a Snips NLU result
+(`intent.intentName`, `intent.probability`, `slots[].value`, `entity`,
+`slotName`). The dataset gives one label per slot value, so `entity` equals
+`slotName`, and values are utterance text, not resolved values.
+
 ## Documentation
 
 `README.md` is rewritten for this project: what is measured, the results

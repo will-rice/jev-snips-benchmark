@@ -42,7 +42,7 @@ What the numbers say:
   held-out dev set, the same per-word question scored 32 slot F1 when the
   word was marked with brackets inside a sentence and `none` had no
   description, 60 once `none` was described, and 76 once the word and its
-  context were given as labelled fields. See [Method](#method).
+  context were given as labelled fields. See [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
   With descriptions, the token scheme is weakest on titles and names that
   only context can tell apart: `object_part_of_series_type` (17), `album`
@@ -99,25 +99,6 @@ Both conditions are zero-shot. The descriptions were written from the label
 names and the training split only, before any description run on the test
 set, and they contain no example values.
 
-### How the token question was developed
-
-The form of the token question, the `none` description, and the gap of two
-words were chosen on a dev set of 700 utterances held out from the training
-split, not on the test set. Each dev figure below is slot F1 with
-descriptions and the gold intent:
-
-| Per-word question                                           | Dev slot F1 |
-| ----------------------------------------------------------- | ----------- |
-| Word marked with brackets in a sentence, `none` undescribed | 31.9        |
-| The same, labelling words left to right with earlier labels | 34.9        |
-| The same, `none` described                                  | 60.0        |
-| The same, short gaps filled                                 | 67.9        |
-| Word and its context as labelled fields, `none` described   | 76.4        |
-
-The span scheme scored 75.5 on the same dev set. Reading the top few words
-from one question per slot scored 67.9 at a quarter of the span scheme's
-tokens.
-
 ### Metrics
 
 - **Intent accuracy:** utterances with the correct intent.
@@ -138,6 +119,52 @@ Measured on the test set's 1,790 gold slot spans:
 A `Choice` takes at most 255 options, so utterances longer than 22 words
 offer spans up to the longest length that fits (14 words for the longest
 test utterance, above the longest gold span of 10).
+
+## What we tried
+
+The two schemes above are what the benchmark runs. Every formulation we
+tried is recorded with its question wording in
+[docs/research/2026-10-04-slot-formulations.md](docs/research/2026-10-04-slot-formulations.md).
+The scores below are slot F1 on a dev set of 700 utterances held out from
+the training split, with descriptions and the gold intent, so they compare
+with each other and not with the test table above. Tokens are mean input
+tokens per utterance.
+
+| Formulation                                                              | Dev slot F1 | Tokens |
+| ------------------------------------------------------------------------ | ----------- | ------ |
+| **Per word, options are slot types**                                     |             |        |
+| Word marked with brackets in a sentence, `none` undescribed              | 31.9        | 2,445  |
+| The same, `none` described                                               | 60.0        | 2,734  |
+| The same, short gaps inside a slot filled                                | 67.9        | 2,734  |
+| Word and context as labelled fields, `none` described (**token scheme**) | **76.4**    | 3,013  |
+| **Per word, left to right**                                              |             |        |
+| Whole utterance, word bracketed, earlier labels shown                    | 34.9        | 4,874  |
+| Only the words so far, last word bracketed, earlier labels shown         | 45.3        | 4,756  |
+| Only the words so far, no bracket, `none` described                      | 47.0        | 4,680  |
+| The same, earlier labels shown                                           | 22.2        | 4,912  |
+| **Per slot, options are spans**                                          |             |        |
+| Sentence question (**span scheme**)                                      | 75.5        | 5,084  |
+| Instructions as labelled fields                                          | 76.2        | 5,359  |
+| Asked only for slots a word-level question says are present              | 75.3        | ~4,000 |
+| **Per slot, options are words**                                          |             |        |
+| Top word only                                                            | 48.6        | 1,303  |
+| Top 3 words above 10% of the top probability, span from first to last    | 67.9        | 1,303  |
+| Top word as anchor, then a second question over spans containing it      | 61.3        | 2,890  |
+
+What we learned:
+
+- Each word has exactly one class, and asking for it directly is the best
+  formulation once it is posed well.
+- `none` needs a description like every other option. Without one, 55% of
+  the words outside any slot were given a slot.
+- Marking a word with brackets inside a sentence is a poor way to point at
+  it. Labelled fields gained 8.5 points on the same question.
+- Showing earlier labels, or hiding the words to the right, did not help.
+- A question over words finds where a slot is (the top word is inside the
+  gold span 92% of the time) but not how far it extends. It is the cheapest
+  formulation by a wide margin.
+- The span scheme asks about each slot separately, so sibling slots such as
+  `city` and `state` both claim the same phrase.
 
 ## Setup
 
@@ -182,8 +209,30 @@ A limited run writes to its own files and leaves the full results in place.
 Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
 per utterance: the tokens and gold labels, the condition, the predicted
 intent and its probabilities, and for each scheme the predicted tags, the
-probabilities of every question's options, and the input tokens used. Records
-are `jevsnips.models.Prediction` objects:
+probabilities of every question's options, and the input tokens used.
+
+Each record also carries a `parse` in the shape of a Snips NLU result, built
+from the predicted intent and the token scheme's slots:
+
+```json
+{
+  "intent": { "intentName": "AddToPlaylist", "probability": 1.0 },
+  "slots": [
+    { "value": "sabrina salerno", "entity": "artist", "slotName": "artist" },
+    {
+      "value": "grime instrumentals playlist",
+      "entity": "playlist",
+      "slotName": "playlist"
+    }
+  ]
+}
+```
+
+SNIPS labels each slot value with one name, so `entity` and `slotName` are
+the same, and `value` is the text from the utterance. Nothing resolves a
+value such as a time expression into a structured value.
+
+Records are `jevsnips.models.Prediction` objects:
 
 ```python
 from pathlib import Path
@@ -199,7 +248,7 @@ predictions = [Prediction.model_validate_json(line) for line in lines]
 ```
 src/jevsnips/
 ├── config.py        # Constants: dataset, model, limits
-├── models.py        # Utterance, SlotPrediction, Prediction
+├── models.py        # Utterance, SlotPrediction, Prediction, Parse
 ├── data.py          # Load utterances and the per-intent slot schema
 ├── descriptions.py  # One-sentence definitions of intents and slots
 ├── jev.py           # Build questions, call Jev, decode answers
