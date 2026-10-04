@@ -229,7 +229,6 @@ __marimo__/
 
 # Benchmark outputs
 results/
-wandb/
 
 # Plan execution scratch
 .superpowers/

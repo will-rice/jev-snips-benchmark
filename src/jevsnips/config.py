@@ -11,4 +11,3 @@ MAX_WORKERS = 8
 MAX_OPTIONS = 255
 NONE = "none"
 RESULTS_DIR = Path("results")
-WANDB_PROJECT = "jev-snips"

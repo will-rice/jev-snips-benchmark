@@ -4,20 +4,11 @@ import argparse
 import logging
 from pathlib import Path
 
-import wandb
 from dotenv import load_dotenv
 from tqdm.contrib.concurrent import thread_map
 from typesafe_sdk import TypeSafeClient
 
-from jevsnips.config import (
-    DATASET_REPO,
-    DATASET_REVISION,
-    MAX_WORKERS,
-    MODEL,
-    RESULTS_DIR,
-    SPLIT,
-    WANDB_PROJECT,
-)
+from jevsnips.config import MAX_WORKERS, RESULTS_DIR, SPLIT
 from jevsnips.data import load_slot_schema, load_utterances
 from jevsnips.jev import predict
 from jevsnips.metrics import evaluate
@@ -38,16 +29,6 @@ def main() -> None:
 
     schema = load_slot_schema()
     utterances = load_utterances(SPLIT)[: args.limit]
-    run = wandb.init(
-        project=WANDB_PROJECT,
-        config={
-            "model": MODEL,
-            "dataset": DATASET_REPO,
-            "revision": DATASET_REVISION,
-            "split": SPLIT,
-            "utterances": len(utterances),
-        },
-    )
     with TypeSafeClient() as client:
         predictions = thread_map(
             lambda utterance: predict(client, utterance, schema),
@@ -66,8 +47,6 @@ def main() -> None:
         "span/input_tokens": sum(p.span.input_tokens for p in predictions),
     }
     versions = sorted({prediction.model for prediction in predictions})
-    run.summary.update(summary | {"model_versions": versions})
-    run.finish()
     for name, value in summary.items():
         logging.info("%s: %s", name, value)
     logging.info("Model versions: %s", versions)

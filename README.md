@@ -85,8 +85,7 @@ uv sync
 cp .env.example .env
 ```
 
-Add your `TYPESAFE_API_KEY` to `.env`, and log in to Weights & Biases or add
-`WANDB_API_KEY`.
+Add your `TYPESAFE_API_KEY` to `.env`.
 
 ## Usage
 
@@ -102,8 +101,7 @@ Evaluate the first 20 utterances as a quick check:
 uv run run --limit 20
 ```
 
-Metrics are logged to the console and to the `jev-snips` wandb project. A
-limited run writes to `results/test-first20.jsonl`, leaving the full run's
+Metrics are logged to the console. A limited run writes to `results/test-first20.jsonl`, leaving the full run's
 `results/test.jsonl` in place.
 
 ## Output

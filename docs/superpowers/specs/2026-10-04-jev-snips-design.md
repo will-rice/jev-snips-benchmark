@@ -165,8 +165,8 @@ Known ceilings, all measured on the test split:
 prediction function over the split with a `ThreadPoolExecutor` and `tqdm`.
 
 Output is `results/{split}.jsonl`, one `Prediction` per line. Metrics, token
-totals per scheme, and the returned model version are logged to wandb and
-with `logging.info`.
+totals per scheme, and the returned model version are logged with
+`logging.info`.
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
 smoke run and writes to `results/{split}-first{N}.jsonl` so it cannot
@@ -220,6 +220,7 @@ The live API path is verified by a `--limit` smoke run, not by tests.
 
 ## Dependencies
 
-Add `typesafe-sdk`, `huggingface-hub`, `seqeval`, `tqdm`, `wandb`.
-Replace the API key names in `.env.example` with `TYPESAFE_API_KEY` and
-`WANDB_API_KEY`.
+Add `typesafe-sdk`, `huggingface-hub`, `seqeval`, `tqdm`. Replace the API key
+names in `.env.example` with `TYPESAFE_API_KEY`. Experiment tracking is not
+used: the run produces a few final numbers, which are logged and can be
+recomputed from the saved predictions.
