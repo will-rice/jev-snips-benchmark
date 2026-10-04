@@ -15,9 +15,13 @@ including the ones that are not in the benchmark code.
   share of utterances with every tag correct. Tokens are mean input tokens
   per utterance.
 - **Model:** `jev-1.13.0`. Single runs; run-to-run noise is about half a
-  point, so differences under one point are not meaningful.
-- Formulations marked **benchmark** are implemented in `src/jevsnips/` and
-  have test-set results in the README. The rest were throwaway scripts.
+  point, so differences under one point are not meaningful. Formulation 6
+  was run several times as the reference for later experiments: its two
+  dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
+  Each table quotes the run made alongside that experiment.
+- The **benchmark** runs formulation 6, token classification, and nothing
+  else. Everything else here was a throwaway script, except formulation 12,
+  which was a second benchmark method until it was removed.
 
 ## Results
 
@@ -85,13 +89,114 @@ plus `none`. Overlapping answers are resolved by probability.
 | 16  | Instructions as labelled fields (`intent`, `field`, `question`)    | 76.2        | 41%             | 5,359  |
 | 17  | As 12, asked only for slots a word-level question says are present | 75.3        | —               | ~4,000 |
 
-- **12** is the **benchmark** span scheme. Test: 48.3 with names, 72.2 with
-  descriptions.
+- **12** follows the docs' extraction cookbook (code supplies candidates,
+  Jev picks one or `none`). It was a second benchmark method and was
+  removed. Test, three runs: 48.3 slot F1 with names, 72.2 with
+  descriptions (frame accuracy 19.3 and 40.5), at 3.65M input tokens per
+  run against 2.11M for token classification.
 - Row 17 was estimated from saved answers by removing spans, without
   re-resolving overlaps, so it is a lower bound; its token figure is an
   estimate.
 - Wording for 12: `The intent is {intent}. Which span of the utterance is
 the {slot}? {description} Answer none if the utterance has no {slot}.`
+
+### The function-calling cookbook's pattern
+
+The docs' function-calling cookbook treats the intent as a function and each
+slot as an argument. Per slot it asks a `stated` yes/no ("does the user say
+anything about this?") and a value `Choice` whose question is written about
+the idea, not the parameter name. Its arguments are closed sets; here the
+options are the utterance's spans, with no `none`. A slot is filled when
+`stated` is at least 0.5; overlaps go to the higher of
+min(`stated`, value probability).
+
+| #   | Formulation                                         | Dev slot F1 | All slots right | Tokens |
+| --- | --------------------------------------------------- | ----------- | --------------- | ------ |
+| 26  | `stated` yes/no plus a plainly worded span question | 66.7        | 25%             | 4,970  |
+
+- Scored on the second half of the dev set, where formulation 12 scores
+  74.8 and formulation 6 scores 77.8.
+- Test, three runs with the benchmark's predicted intents: 66.9 slot F1
+  (66.4–67.2), 29.1 frame accuracy (28.3–29.6), 3.58M input tokens per run.
+- `stated` says yes for 13.9% of slot types the utterance does not use
+  (formulation 12 answers with a span instead of `none` for 27%), but says
+  no for 12.5% of the ones it does use (about 2% for formulation 12).
+- The 53 question pairs were written for this test and replaced the slot
+  descriptions, so the result reflects that wording as well as the pattern.
+- Example, `city` under `GetWeather`: value question "Which city or town
+  does the user want the weather for?", stated question "Does the user name
+  a city or town, as opposed to a state or a country?"
+
+### Combining two formulations
+
+| #   | Formulation                                                                          | Dev slot F1 | All slots right | Tokens |
+| --- | ------------------------------------------------------------------------------------ | ----------- | --------------- | ------ |
+| 27  | Labels from 6; where a span from 12 holds only that type's words, use its boundaries | 79.8        | 55%             | 8,097  |
+| 28  | As 27, with spans from 26 instead of 12                                              | 77.5        | 51%             | 7,983  |
+
+Scored on the second half of the dev set (formulation 6: 77.8). On the first
+half, 27 scores 78.9 against 76.2. The rule has no tuned parameters.
+
+### Repairing boundaries after token classification
+
+Formulation 6 gets 1,416 of the dev set's 1,804 gold spans exactly right. Of
+the 388 it misses: 142 have some word given another slot type, 121 have the
+right type but lack an edge word, 110 have the right type but are split by
+unlabelled words in the middle, and 15 are missed entirely. The slot words
+it labels `none` are mostly function words ("the" 99 of 301, "in" 33, "of"
+23), and it is confident about them: median probability 0.88 for `none` and
+0.09 for the correct slot.
+
+| #   | Formulation                                                                             | Dev slot F1 | Tokens |
+| --- | --------------------------------------------------------------------------------------- | ----------- | ------ |
+| 6   | The benchmark decoder (gaps of up to two words filled)                                  | 77.7        | 3,013  |
+| 29  | A `none` word next to a slot joins it when that slot's probability for the word is high | 77.7        | 3,013  |
+| 30  | Most probable label sequence with a bonus for repeating the previous label (Viterbi)    | 77.7        | 3,013  |
+| 31  | A yes/no per `none` word touching a predicted slot: "is it part of that value?"         | 77.7        | 3,657  |
+
+- Second half of the dev set; settings tuned on the first half. In all three
+  the tuning chose the setting that changes nothing. Any active setting
+  scored lower: row 31 at a 0.5 threshold scores 68.4.
+- Rows 29 and 30 use only the saved per-word probabilities. They cannot help
+  because the missed words are not close calls.
+- Row 31's yes/no was asked 2,207 times, 148 of which should be yes. At 0.5
+  it says yes to 114 of those and to 314 that should be no.
+
+### Few-shot examples
+
+Formulation 6 plus examples drawn from training utterances that are not in
+the dev set. Mean of the two halves of the dev set, where formulation 6
+scores 76.5 (75.3 and 77.7).
+
+| #   | Formulation                                       | Dev slot F1 | All slots right | Tokens |
+| --- | ------------------------------------------------- | ----------- | --------------- | ------ |
+| 32  | 3 labelled utterances of the intent in the state  | 78.0        | 51%             | 3,256  |
+| 33  | 8 labelled utterances                             | 80.8        | 56%             | 3,671  |
+| 34  | 16 labelled utterances                            | 81.6        | 57%             | 4,302  |
+| 35  | **32 labelled utterances**                        | 83.3        | 60%             | 5,564  |
+| 36  | 64 labelled utterances                            | 83.9        | 62%             | 8,184  |
+| 37  | 3 example values in each slot option's `examples` | 79.0        | 54%             | 5,101  |
+| 38  | 8 example values per slot option                  | 81.7        | 57%             | 6,992  |
+| 39  | 16 example values per slot option                 | 81.8        | 58%             | 9,621  |
+
+- **35** is the benchmark's `fewshot` condition. Test, three runs with the
+  predicted intent: 79.7 slot F1 (79.5–79.9), 54.3 frame accuracy
+  (53.9–54.9), 3.92M slot input tokens per run.
+- The test gain over descriptions is 3.3 points, about half the 6.8 on dev.
+  The two differ in the example sample (one seed each), in the dev set using
+  the gold intent, and in the dev set being drawn from the same split as the
+  examples. Only one example sample was run on test, so how much the result
+  depends on which examples are drawn is not measured.
+- A labelled utterance is `{"utterance": "play the best of abba", "slots":
+[{"slot": "album", "value": "the best of"}, {"slot": "artist", "value":
+"abba"}]}`, in a `labelled_examples` list in the state.
+- Per slot on test, few-shot against descriptions: large gains where a slot
+  takes a few fixed words (`object_part_of_series_type` 17 to 86,
+  `current_location` 62 to 100, `movie_type` 75 to 99, `music_item` 62 to
+  79); little change on titles (`album`, `track`, `entity_name`,
+  `movie_name`); a large drop on `object_location_type` (85 to 46).
+- SNIPS's training split contains 64 rows whose text equals one of 25 test
+  utterances, with the same labels. They are excluded from the examples.
 
 ### One question per slot, options are words
 
@@ -149,14 +254,22 @@ word that points to the work without naming it, or the kind of work."}`
   that to 13% and nearly doubled F1 (rows 1 and 3). Where it sits in the
   list made no difference (rows 2 and 4).
 - **Brackets inside a sentence are a poor way to point at a word.** The same
-  question with the word and its context as labelled fields gained 8.5
-  points (rows 5 and 6). The docs say Jev is trained on structure and reads
+  question with the word and its context as labelled fields gained about
+  10 points on the same half of the dev set (rows 5 and 6). The docs say Jev is trained on structure and reads
   instructions literally.
 - **Feeding earlier labels back did not help.** It gave a small gain while
   `none` was broken (rows 1 and 7) and hurt once it was fixed (rows 3 and 9,
   10 and 11). It also costs one request per word.
 - **Hiding the words to the right hurts.** A word like "the" cannot be
   labelled without what follows (rows 3 and 10).
+- **The remaining boundary errors cannot be repaired after the fact.** Jev
+  is confident that "the" or "of" inside a name is filler, so neither the
+  saved probabilities nor a follow-up yes/no about the word recovers it
+  (rows 29–31).
+- **Examples teach what a description cannot.** Labelled utterances in the
+  state add 3 points on test and 7 on dev, mostly on slots with a few fixed
+  values. They sit in the state once, so they cost far less than example
+  values repeated on every option (rows 35 and 38).
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.
@@ -169,7 +282,15 @@ word that points to the work without naming it, or the kind of work."}`
   about where it was and cost 47% more tokens (row 24). Telling Jev that
   every word of a title counts halved the missed title words but pulled
   more outside words into slots, for a net loss (row 25).
-- **The span scheme's errors are mostly sibling confusions.** Each slot is
+- **The docs' patterns ask per field, and that is their weakness here.**
+  Both cookbook patterns (rows 12 and 26) ask about each slot type on its
+  own. On the test set, token classification beats them by 4 and 10 points
+  of slot F1 at about 60% of the tokens.
+- **A `stated` gate trades false proposals for misses** and loses overall
+  (row 26).
+- **Two formulations together beat either alone** (row 27), at 2.7 times the
+  tokens of token classification. Not adopted.
+- **The span question's errors are mostly sibling confusions.** Each slot is
   asked separately, so `city` and `state` both claim "mt" and code picks a
   winner. On the test set it proposed a span for a slot the utterance does
   not have in 27% of such questions. Moving or describing `none` did not
@@ -178,10 +299,18 @@ word that points to the work without naming it, or the kind of work."}`
 ## Not tried
 
 - Chunk first (a yes/no per gap between words), then one `Choice` per chunk.
-- A yes/no presence gate per slot before the span question.
 - `what` / `not_for` rubrics on the span scheme, where sibling confusion is
   the main error. They were only tried on the token scheme.
 - `examples` in the option rubrics.
-- Example values from the training split in the descriptions (few-shot).
+- Several example samples on test, to measure how much few-shot depends on
+  which utterances are drawn, and choosing examples similar to the utterance
+  instead of at random.
+- Why `object_location_type` falls with examples.
 - Using the top-k reading for confident slots and the span question for the
   rest.
+- Treating slots with a few fixed values (`rating_unit`, `object_select`,
+  `music_item`) as closed sets, as the function-calling cookbook does. It
+  needs value lists from the training split.
+- Rules about specific function words at span edges (for example always
+  attaching a leading "the"). SNIPS is not consistent about these, so it
+  would be tuning to the annotation.

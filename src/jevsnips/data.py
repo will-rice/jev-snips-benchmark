@@ -1,11 +1,19 @@
 """Load SNIPS utterances and the per-intent slot schema."""
 
 import csv
+import random
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
 
-from jevsnips.config import DATASET_REPO, DATASET_REVISION, SCHEMA_SPLIT
+from jevsnips.config import (
+    DATASET_REPO,
+    DATASET_REVISION,
+    FEWSHOT_EXAMPLES,
+    FEWSHOT_SEED,
+    SCHEMA_SPLIT,
+    SPLIT,
+)
 from jevsnips.models import Utterance
 
 
@@ -45,6 +53,35 @@ def load_slot_schema() -> dict[str, list[str]]:
                 tag[2:] for tag in row["slots"].split() if tag != "O"
             )
     return {intent: sorted(slots) for intent, slots in sorted(schema.items())}
+
+
+def load_examples() -> dict[str, list[Utterance]]:
+    """Sample labelled training utterances for each intent.
+
+    The sample is fixed by FEWSHOT_SEED, so every run shows the model the
+    same examples. SNIPS repeats some evaluated utterances in its training
+    split; those are never used as examples.
+
+    Returns:
+        Intents in sorted order, each with FEWSHOT_EXAMPLES utterances.
+    """
+    evaluated = {utterance.tokens for utterance in load_utterances(SPLIT)}
+    by_intent: dict[str, list[Utterance]] = {}
+    with download(SCHEMA_SPLIT).open(newline="") as file:
+        for row in csv.DictReader(file):
+            tokens, tags = row["input"].split(), row["slots"].split()
+            # The training split has one row whose token and tag counts differ.
+            if len(tokens) == len(tags) and tuple(tokens) not in evaluated:
+                by_intent.setdefault(row["intent"], []).append(
+                    Utterance(
+                        tokens=tuple(tokens), intent=row["intent"], tags=tuple(tags)
+                    )
+                )
+    sampler = random.Random(FEWSHOT_SEED)
+    return {
+        intent: sampler.sample(utterances, FEWSHOT_EXAMPLES)
+        for intent, utterances in sorted(by_intent.items())
+    }
 
 
 def download(split: str) -> Path:

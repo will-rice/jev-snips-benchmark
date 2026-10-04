@@ -1,4 +1,4 @@
-"""Compare the saved runs of the names and descriptions conditions."""
+"""Compare the saved runs of every condition."""
 
 import logging
 from typing import get_args
@@ -51,23 +51,20 @@ def main() -> None:
             ]
         )
 
-    for scheme in ("token", "span"):
-        logging.info("== %s scheme: slot F1 per slot type ==", scheme)
-        per_slot = {
-            condition: summarize(
-                [slot_f1(predictions, scheme) for predictions in runs[condition]]
-            )
-            for condition in conditions
-        }
-        for slot in sorted(per_slot[conditions[0]]):
-            logging.info(
-                "%-28s %s",
-                slot,
-                "  ".join(
-                    f"{condition} {per_slot[condition][slot][0]:.3f}"
-                    for condition in conditions
-                ),
-            )
+    logging.info("== slot F1 per slot type ==")
+    per_slot = {
+        condition: summarize([slot_f1(predictions) for predictions in runs[condition]])
+        for condition in conditions
+    }
+    for slot in sorted(per_slot[conditions[0]]):
+        logging.info(
+            "%-28s %s",
+            slot,
+            "  ".join(
+                f"{condition} {per_slot[condition][slot][0]:.3f}"
+                for condition in conditions
+            ),
+        )
 
 
 def log_summary(metrics: list[dict[str, float]]) -> None:
@@ -76,14 +73,11 @@ def log_summary(metrics: list[dict[str, float]]) -> None:
         logging.info("%-22s mean %.4f, range %.4f to %.4f", name, mean, low, high)
 
 
-def slot_f1(predictions: list[Prediction], scheme: str) -> dict[str, float]:
-    """Return span-level F1 for each slot type under one scheme."""
+def slot_f1(predictions: list[Prediction]) -> dict[str, float]:
+    """Return span-level F1 for each slot type."""
     report = classification_report(
         [list(prediction.utterance.tags) for prediction in predictions],
-        [
-            list((prediction.token if scheme == "token" else prediction.span).tags)
-            for prediction in predictions
-        ],
+        [list(prediction.slots.tags) for prediction in predictions],
         output_dict=True,
         zero_division=0,
     )

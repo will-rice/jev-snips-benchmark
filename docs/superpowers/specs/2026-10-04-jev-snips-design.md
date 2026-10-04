@@ -214,10 +214,34 @@ descriptions condition the `none` option carries a description. Decoding
 fills up to `MAX_GAP = 2` unlabelled words between two words of the same
 type. This supersedes the bracketed-sentence question described above.
 
+## Single slot method
+
+This supersedes every other section of this document, above or below, that
+describes a span scheme, two schemes, or tests for them.
+
+The span scheme was removed. The benchmark's only slot method is token
+classification, so each utterance takes two requests (intent, then one
+`Choice` per word) and a `Prediction` holds one `slots` field. Metrics are
+`intent_accuracy`, `slot_f1`, and `frame_accuracy`. Sections above that
+describe a span scheme, a 255-option cap, or per-scheme metrics are
+superseded. The span scheme's results and the other formulations tried are
+recorded in `docs/research/2026-10-04-slot-formulations.md`.
+
+## Few-shot condition
+
+A third condition, `fewshot`, is the descriptions condition plus
+`FEWSHOT_EXAMPLES = 32` labelled training utterances of the predicted intent
+in the slot request's state. Examples are sampled once per intent with
+`FEWSHOT_SEED`, from aligned training rows whose text does not appear in the
+evaluated split. The intent question is unchanged. This supersedes the Scope
+section's statements that few-shot is out of scope and that no training
+utterance is sent to the model; the latter still holds for the names and
+descriptions conditions.
+
 ## Snips-style parse
 
 Each `Prediction` has a computed `parse`: the predicted intent with its
-probability and the token scheme's slots, in the shape of a Snips NLU result
+probability and the predicted slots, in the shape of a Snips NLU result
 (`intent.intentName`, `intent.probability`, `slots[].value`, `entity`,
 `slotName`). The dataset gives one label per slot value, so `entity` equals
 `slotName`, and values are utterance text, not resolved values.
