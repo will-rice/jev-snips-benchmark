@@ -226,3 +226,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Benchmark outputs
+results/
+wandb/
+
+# Plan execution scratch
+.superpowers/
