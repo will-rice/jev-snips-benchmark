@@ -23,6 +23,11 @@ SNIPS test set, 700 utterances, model `jev-1.13.0`, zero-shot.
 Intent accuracy is shared: both schemes use the same predicted intent, which
 took a further 252,703 input tokens.
 
+Jev's slot answers are not identical between runs. A second full run gave the
+same intent accuracy and token counts, but 25.5% and 48.9% slot F1 and 0.9%
+and 19.3% frame accuracy for the token and span schemes. Treat differences
+below about one point as noise.
+
 Supervised models trained on the 13,084 SNIPS training utterances reach
 roughly 98–99% intent accuracy and 96–97% slot F1; nothing here is trained.
 Zero-shot intent detection from intent names alone is close to that. Slot
