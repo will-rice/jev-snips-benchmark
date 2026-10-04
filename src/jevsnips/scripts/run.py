@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+from pathlib import Path
 
 import wandb
 from dotenv import load_dotenv
@@ -32,6 +33,7 @@ def main() -> None:
         "--limit", type=int, help="Evaluate only the first N utterances."
     )
     args = parser.parse_args()
+    path = results_path(args.limit)
     load_dotenv()
 
     schema = load_slot_schema()
@@ -54,7 +56,6 @@ def main() -> None:
         )
 
     RESULTS_DIR.mkdir(exist_ok=True)
-    path = RESULTS_DIR / f"{SPLIT}.jsonl"
     path.write_text(
         "".join(prediction.model_dump_json() + "\n" for prediction in predictions)
     )
@@ -71,6 +72,21 @@ def main() -> None:
         logging.info("%s: %s", name, value)
     logging.info("Model versions: %s", versions)
     logging.info("Wrote %d predictions to %s", len(predictions), path)
+
+
+def results_path(limit: int | None) -> Path:
+    """Return where a run saves its predictions.
+
+    A limited run gets its own file so it cannot overwrite a full run.
+
+    Raises:
+        ValueError: If the limit is not positive.
+    """
+    if limit is None:
+        return RESULTS_DIR / f"{SPLIT}.jsonl"
+    if limit < 1:
+        raise ValueError(f"--limit must be positive, got {limit}")
+    return RESULTS_DIR / f"{SPLIT}-first{limit}.jsonl"
 
 
 if __name__ == "__main__":

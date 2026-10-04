@@ -169,7 +169,8 @@ totals per scheme, and the returned model version are logged to wandb and
 with `logging.info`.
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
-smoke run. `results/` is git-ignored.
+smoke run and writes to `results/{split}-first{N}.jsonl` so it cannot
+overwrite a full run. A non-positive limit raises before any request. `results/` is git-ignored.
 
 ### Errors
 

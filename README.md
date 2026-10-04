@@ -41,6 +41,9 @@ Each utterance gets three requests, all with the utterance as state.
 3. **Span scheme.** One `Choice` per slot type, asking which span of the
    utterance fills it. The options are the utterance's contiguous word spans.
    When two slot types pick overlapping spans, the more probable one is kept.
+   The API reports probabilities to two decimals, so ties occur (65 of the
+   700 test utterances) and are broken by slot name; other tie orders move
+   span slot F1 by about half a point.
 
 Both slot schemes offer only the slot types of the **predicted** intent, the
 way an assistant's schema restricts which slots an intent accepts. The gold
@@ -99,7 +102,9 @@ Evaluate the first 20 utterances as a quick check:
 uv run run --limit 20
 ```
 
-Metrics are logged to the console and to the `jev-snips` wandb project.
+Metrics are logged to the console and to the `jev-snips` wandb project. A
+limited run writes to `results/test-first20.jsonl`, leaving the full run's
+`results/test.jsonl` in place.
 
 ## Output
 
