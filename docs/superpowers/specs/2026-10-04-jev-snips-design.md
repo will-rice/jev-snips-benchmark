@@ -1,299 +1,201 @@
-# Jev on SNIPS: zero-shot intent detection and slot filling
+# Jev on SNIPS: design
+
+This describes the benchmark as it is now. How it got here, including the
+formulations that were tried and dropped, is in
+`docs/research/2026-10-04-slot-formulations.md`. The original implementation
+plan in `docs/superpowers/plans/` is historical.
 
 ## Goal
 
-Measure how TypeSafe AI's Jev (a non-generative "System One" decision model)
-performs zero-shot on the SNIPS NLU benchmark, on both intent detection and
-slot filling, using metrics comparable to published supervised results.
+Measure how TypeSafe AI's Jev, a non-generative "System One" decision model,
+performs on the SNIPS NLU benchmark for intent detection and slot filling,
+without training, using metrics comparable to published supervised results.
 
-Success: one command evaluates the 700-utterance SNIPS test set and reports
-intent accuracy, slot F1, and semantic-frame accuracy, with per-utterance
-predictions saved for later analysis.
+One command evaluates a condition on the 700-utterance SNIPS test set three
+times and reports intent accuracy, slot F1, and semantic-frame accuracy,
+with per-utterance predictions saved for later analysis.
 
 ## Background
 
 - Jev takes a `state` and a map of typed questions and returns typed answers
-  with probabilities in one parallel pass. It has no span-extraction primitive.
+  with probabilities in one parallel pass. Questions in a request are
+  answered independently. It has no span-extraction primitive.
 - A `Choice` question takes `instructions` and `criteria` (option name to
-  optional description, at most 255 options) and returns `choice`,
-  `probabilities` (sum to 1), and `confidence`.
-- Access is the official `typesafe-sdk` package:
+  optional description) and returns `choice`, `probabilities`, and
+  `confidence`. Instructions, criteria values, and state may each be a
+  string or a JSON structure.
+- Access is the `typesafe-sdk` package:
   `TypeSafeClient().system_one(state, questions)`, authenticated by
-  `TYPESAFE_API_KEY`, with built-in retry and backoff on 429/529.
-- Data is `bkonkle/snips-joint-intent` on the Hugging Face Hub: `test.csv` with
-  columns `input,intent,slots` (whitespace-separated tokens and BIO tags),
-  plus `intent_labels.txt` and `slot_labels.txt`.
-- Verified on the test split: 700 rows, 7 intents, 39 slot types, 1790 slot
-  spans, at most 24 tokens, no token/tag misalignment, and no two adjacent
-  spans of the same slot type.
-- Each intent uses a small subset of the slot types: between 2
-  (`SearchCreativeWork`) and 14 (`BookRestaurant`). Every slot type that an
-  intent uses in test also appears with that intent in train.
+  `TYPESAFE_API_KEY`, with built-in retry and backoff.
+- Jev's answers vary slightly between identical requests, and it reports
+  probabilities to two decimals.
+- The state is ingested once per request and every question is evaluated
+  against it, so text in the state is billed once and text in a question's
+  options is billed per question.
+- `MODEL` is pinned to `jev-1.13.0`. The `jev-latest` alias moves when a new
+  release ships.
 
-## Scope
+## Data
 
-In scope: zero-shot evaluation of Jev on the SNIPS test split.
+- `bkonkle/snips-joint-intent` on the Hugging Face Hub, pinned to a
+  revision: `train.csv` and `test.csv` with columns `input,intent,slots`
+  (whitespace-separated tokens and BIO tags).
+- Test: 700 rows, 7 intents, 39 slot types, 1,790 slot spans, no token/tag
+  misalignment.
+- Train: 13,084 rows, one of which has mismatched token and tag counts.
+- 64 training rows have the same text as one of 25 test utterances.
 
-In scope: two slot-filling schemes compared under otherwise identical
-conditions (see Questions).
+`data.py` provides:
 
-Out of scope: label descriptions, few-shot examples, gold-intent (oracle)
-slot filling, and baselines. Each
-would be a separate ablation; any prompt development for them must use train,
-never test.
+- `load_utterances(split)`: the split as `Utterance` models.
+- `load_slot_schema()`: each intent's slot types, read from the training
+  split's intent and tag columns. This is the assistant's schema; the intent
+  inventory is its keys.
+- `load_example_pool()`: every aligned training utterance whose text does
+  not appear in the evaluated split, per intent. Nothing shown to the model
+  as an example comes from outside this pool, so a test utterance is never
+  shown with its own labels.
+- `load_examples()`: `FEWSHOT_EXAMPLES = 32` utterances per intent, sampled
+  from the pool once with `FEWSHOT_SEED`.
 
-The train split is used only to derive each intent's slot schema. No train
-utterance is sent to the model.
+## Method
 
-## Design
+Slot filling is token classification: each word gets one class, a slot type
+of the predicted intent or `none`. `jev.predict` makes two requests per
+utterance.
 
-### Package layout
+1. **Intent.** One `Choice` named `intent` over the 7 intents. State is the
+   utterance text.
+2. **Slots.** One `Choice` named `token_{i}` per word over the predicted
+   intent's slot types plus `none`, in one request. Instructions are an
+   object with the keys `intent`, `words_before`, `word`, `words_after`, and
+   `question`. Without examples, the state is `{"utterance": text}` and the
+   question is "Which slot does `word` fill in `utterance`? Answer none if
+   it fills no slot." The example conditions change both; see below.
 
-Rename `agent_harness` to `jevsnips` and delete the template's `Agent`,
-`Task`, `Harness`, and `Result`. They score one task to a float and convert
-exceptions into `score=0.0`; slot F1 is corpus-level and an API failure must
-stop the run instead of being recorded as a wrong answer.
+Slots are conditioned on the predicted intent, never the gold intent, so an
+intent error costs the slots as well.
 
-| Module           | Responsibility                                                        |
-| ---------------- | --------------------------------------------------------------------- |
-| `config.py`      | Constants: `MODEL`, `MAX_WORKERS`, `SPLIT`, `DATASET_REPO`, `NONE`    |
-| `models.py`      | Pydantic models for parsed data and saved predictions                 |
-| `data.py`        | Download a split and the label files and parse them into models       |
-| `jev.py`         | Build questions for one utterance, call Jev, decode both slot schemes |
-| `metrics.py`     | Intent accuracy, slot F1, semantic-frame accuracy                     |
-| `scripts/run.py` | Entry point: load, predict concurrently, save predictions, score, log |
+### Conditions
 
-### Models
+`Condition` is one of four values.
 
-All parsed data and all saved output are frozen pydantic models, so invalid
-rows fail at construction and the JSONL output has one schema.
+- `names`: option descriptions are `None`.
+- `descriptions`: every intent and slot option carries its one-sentence
+  definition from `descriptions.py`, keyed by intent and slot, and `none`
+  carries `NONE_DESCRIPTION`. Definitions were written from label names and
+  the training split only and contain no example values.
+- `fewshot`: the intent request is as in `descriptions`. The slot request's
+  state holds `utterance`, `slot_definitions` (each slot's definition, and
+  `none`'s), and `labelled_examples` (the fixed sample for the predicted
+  intent). Its options carry no descriptions, and its question is "Which
+  slot does `word` fill in `utterance`? The slots are defined in
+  `slot_definitions`. Label it the way matching words are labelled in
+  `labelled_examples`. Answer none if it fills no slot."
+- `retrieved`: the intent request keeps the option descriptions, and its
+  state becomes `{"utterance", "labelled_examples"}` with the
+  `RETRIEVED_EXAMPLES = 8` most similar pool utterances of any intent and
+  the question "What is the intent of `utterance`?". The slot request is as
+  in `fewshot`, with the 8 most similar pool utterances of the predicted
+  intent as its examples.
 
-- `Utterance`: `tokens`, `intent`, `tags`. A validator rejects a row whose
-  token and tag counts differ, so a misaligned utterance cannot exist.
-- `SlotPrediction`: one scheme's result for one utterance: `tags`,
-  `probabilities` (question name to option probabilities), `input_tokens`.
-  A validator on `Prediction` requires each scheme's `tags` to match the
-  utterance length.
-- `Prediction`: the saved record: the `Utterance`, `intent` (predicted),
-  `intent_probabilities`, `intent_input_tokens`, `token` and `span` (`SlotPrediction` each), and
-  `model` (the version the API returned).
+Example shapes:
 
-Records are written with `model_dump_json` and can be reloaded with
-`model_validate_json`.
+- Slot request: `{"utterance": text, "words": [{"word", "slot"}, ...]}`,
+  one entry per word, `none` for words outside any slot.
+- Intent request: `{"utterance": text, "intent": name}`.
 
-### Data
+### Retrieval
 
-`data.py` downloads files with `hf_hub_download` and parses each row into an
-`Utterance`: tokens (`input.split()`), an intent, and gold BIO tags
-(`slots.split()`).
-
-The slot schema maps each intent to the slot types that occur with it in the
-train split, read from the `intent` and `slots` columns with the `B-`/`I-`
-prefix removed. This is the assistant's schema (which slots an intent
-accepts), the same information a deployed NLU system is configured with.
-Train has one row whose token and tag counts differ; the schema reads tags
-only, so the alignment check applies to the evaluated split.
-
-The intent inventory is the schema's keys. The dataset is pinned to a commit
-so the benchmark is reproducible.
-
-### Questions
-
-Three requests per utterance, all with the utterance text as `state`: one for
-the intent, then one per slot scheme. Both schemes are conditioned on the same
-predicted intent, so they differ only in how slots are asked and decoded.
-
-1. Intent: one `Choice` named `intent` whose options are the 7 intent names.
-2. Token scheme: one `Choice` named `token_{i}` per token index `i`, whose
-   options are the predicted intent's slot types plus `none`. The
-   instructions name the intent and show the utterance with token `i` in
-   brackets, for example `add sabrina [salerno] to the grime instrumentals
-playlist`, so repeated words are unambiguous.
-3. Span scheme: one `Choice` per slot type of the predicted intent, named
-   after the slot type, asking which span of the utterance fills that slot.
-   The options are the texts of the utterance's contiguous word spans plus
-   `none`.
-
-Span options are deduplicated by text, and a text refers to its first
-occurrence in the utterance. A `Choice` takes at most 255 options, so span
-length is capped per utterance at the largest length whose spans plus `none`
-fit. Utterances of up to 22 tokens offer every span; the longest test
-utterance (24 tokens) offers spans of up to 14 words, above the longest gold
-span in test (10 words).
-
-Slots are conditioned on the predicted intent, never the gold intent, so no
-label leaks into the slot or frame metrics. An intent error therefore offers
-the wrong slot options and usually costs the slots too, which is how a real
-pipeline behaves.
-
-All option descriptions are `None`: the model sees label names and span texts
-only. This is the zero-shot condition and nothing is tuned against the test
-set.
+`retrieval.py` builds one TF-IDF index per intent, and one over all intents
+under the key `ALL_INTENTS`, with scikit-learn. Features are an utterance's
+words and adjacent word pairs. Only the first copy of a repeated text is
+indexed. `retrieve` returns the examples with the highest cosine similarity
+to the utterance, best first.
 
 ### Decoding
 
-Intent is the `choice` of the `intent` answer.
+`decode_tokens` converts the per-word choices to BIO tags. Adjacent words
+with the same type form one span. Up to `MAX_GAP = 2` unlabelled words
+between two words of the same type take that type.
 
-Token scheme: take the `choice` of each token answer. `none` becomes `O`.
-Otherwise a token gets `B-type` if the previous token's type differs and
-`I-type` if it is the same.
+## Metrics
 
-Span scheme: each slot type whose `choice` is not `none` proposes one span.
-Proposals are accepted in descending order of the chosen option's
-probability, skipping any that overlaps an accepted span. Accepted spans are
-written as `B-type I-type ...`; all other tokens are `O`.
+`metrics.evaluate` returns:
 
-Known ceilings, all measured on the test split:
+- `intent_accuracy`: fraction of utterances with the correct intent.
+- `slot_f1`: span-level micro F1 from `seqeval` (conlleval).
+- `frame_accuracy`: fraction of utterances with the correct intent and an
+  exactly matching tag sequence.
 
-| Limitation                                                    | Scheme | Gold spans affected |
-| ------------------------------------------------------------- | ------ | ------------------- |
-| Two adjacent spans of the same type merge into one            | Token  | 0 of 1790           |
-| A slot type can fill only one span per utterance              | Span   | 0 of 1790           |
-| A span whose text also occurs earlier resolves to the earlier | Span   | 1 of 1790           |
+`metrics.summarize` reduces repeated runs to mean, minimum, and maximum.
 
-### Metrics
+## Models
 
-- Intent accuracy: fraction of utterances with the correct intent.
-- Slot F1: span-level micro F1 from `seqeval`, the conlleval-equivalent used
-  in the SNIPS literature, reported per scheme.
-- Semantic-frame accuracy: fraction of utterances with the correct intent and
-  an exactly matching tag sequence, reported per scheme.
+Frozen pydantic models in `models.py`:
 
-### Run
+- `Utterance`: `tokens`, `intent`, `tags`; rejects mismatched token and tag
+  counts.
+- `SlotPrediction`: `tags`, `probabilities` (question name to option
+  probabilities), `input_tokens`.
+- `Prediction`: the `Utterance`, `condition`, predicted `intent`,
+  `intent_probabilities`, `intent_input_tokens`, `slots`, and `model` (the
+  version the API returned). It rejects slot tags that do not cover every
+  token, and has a computed `parse`.
+- `Parse`: the predicted intent with its probability and the predicted slots
+  in the shape of a Snips NLU result (`intent.intentName`,
+  `intent.probability`, `slots[].value`, `entity`, `slotName`). The dataset
+  gives one label per slot value, so `entity` equals `slotName`, and values
+  are utterance text, not resolved values.
 
-`scripts/run.py` loads `.env`, builds one `TypeSafeClient`, and maps the
-prediction function over the split with a `ThreadPoolExecutor` and `tqdm`.
+## Scripts
 
-Output is `results/{split}.jsonl`, one `Prediction` per line. Metrics, token
-totals per scheme, and the returned model version are logged with
-`logging.info`.
+- `run <condition> [--limit N]`: runs the condition `RUNS = 3` times over
+  the test split with a thread pool, writes each run to
+  `results/test-{condition}-run{n}.jsonl`, and logs each metric's mean and
+  range. A limited run writes to `...-first{N}.jsonl`, which is git-ignored,
+  so it cannot overwrite a full run. A non-positive limit raises before any
+  request.
+- `report`: loads every condition's saved runs and logs the metrics overall,
+  on utterances where every condition got the intent right, and slot F1 per
+  slot type.
 
-One optional argument, `--limit N`, evaluates the first N rows for a cheap
-smoke run and writes to `results/{split}-first{N}.jsonl` so it cannot
-overwrite a full run. A non-positive limit raises before any request. Full-run results are committed; smoke-run files are git-ignored.
+Full-run results are committed, because Jev's answers vary between runs and
+the reported numbers could not otherwise be checked.
 
-### Errors
+## Errors
 
 No fallbacks. SDK retries handle rate limits; any other API error, a missing
-key, or a misaligned row raises and stops the run. A run is cheap enough to
-repeat, so there is no resume logic.
-
-### Probe results
-
-One 24-token `BookRestaurant` utterance was sent to `jev-latest` before
-planning. The API returned model `jev-1.13.0`. All 14 span questions with 246
-options each fit in one request (45,400 input tokens, 0.5 s); the token
-scheme used 4,436 input tokens and the intent question 375. Each answer's
-`probabilities` is keyed by option name and includes the chosen option.
-
-A token equal to the `none` option would collide with it in the span scheme.
-No test utterance contains one, and building span options for such an
-utterance raises.
-
-## Label descriptions ablation
-
-Added after the first results. A `condition` argument selects `names` (the
-design above) or `descriptions`, in which every intent and slot carries a
-one-sentence definition from `descriptions.py`, keyed by intent and slot.
-The token scheme passes it as the option's description; the span scheme adds
-it to the question. Definitions were written from label names and the train
-split only and contain no example values.
-
-Jev's slot answers vary between runs, so each condition runs `RUNS = 3`
-times, saved as `results/{split}-{condition}-run{n}.jsonl`. `report` compares
-the conditions: mean and range per metric, the same on utterances where
-every condition got the intent right, and slot F1 per slot type.
-
-## Token question revision
-
-Added after the descriptions ablation, developed on a 700-utterance dev set
-held out from train. The token question's instructions are labelled fields
-(`intent`, `words_before`, `word`, `words_after`, `question`) and its state
-is `{"utterance": ...}`; no marker is placed inside the utterance. Under the
-descriptions condition the `none` option carries a description. Decoding
-fills up to `MAX_GAP = 2` unlabelled words between two words of the same
-type. This supersedes the bracketed-sentence question described above.
-
-## Single slot method
-
-This supersedes every other section of this document, above or below, that
-describes a span scheme, two schemes, or tests for them.
-
-The span scheme was removed. The benchmark's only slot method is token
-classification, so each utterance takes two requests (intent, then one
-`Choice` per word) and a `Prediction` holds one `slots` field. Metrics are
-`intent_accuracy`, `slot_f1`, and `frame_accuracy`. Sections above that
-describe a span scheme, a 255-option cap, or per-scheme metrics are
-superseded. The span scheme's results and the other formulations tried are
-recorded in `docs/research/2026-10-04-slot-formulations.md`.
-
-## Few-shot condition
-
-A third condition, `fewshot`, is the descriptions condition plus
-`FEWSHOT_EXAMPLES = 32` labelled training utterances of the predicted intent
-in the slot request's state, each shown as its text and a
-`{"word", "slot"}` label for every word. Examples are sampled once per intent with
-`FEWSHOT_SEED`, from aligned training rows whose text does not appear in the
-evaluated split. The intent question is unchanged. This supersedes the Scope
-section's statements that few-shot is out of scope and that no training
-utterance is sent to the model; the latter still holds for the names and
-descriptions conditions.
-
-## Retrieved condition
-
-A fourth condition, `retrieved`, is the few-shot condition with the examples
-chosen per utterance: the `RETRIEVED_EXAMPLES = 8` training utterances of
-the predicted intent most similar to it, by TF-IDF cosine over words and
-adjacent word pairs (`retrieval.py`, scikit-learn). The pool is
-`load_example_pool()`: every aligned training utterance whose text does not
-appear in the evaluated split. `load_examples()` samples the fixed few-shot
-set from the same pool. The retrieval index holds only the first copy of
-each repeated text, so the examples retrieved for an utterance are distinct.
-
-Under `retrieved` the intent request also shows examples: the 8 most similar
-training utterances across all intents (the index's `ALL_INTENTS` entry),
-each as its text and intent, in a `labelled_examples` list beside the
-utterance. The other conditions' intent request is unchanged.
-
-## Snips-style parse
-
-Each `Prediction` has a computed `parse`: the predicted intent with its
-probability and the predicted slots, in the shape of a Snips NLU result
-(`intent.intentName`, `intent.probability`, `slots[].value`, `entity`,
-`slotName`). The dataset gives one label per slot value, so `entity` equals
-`slotName`, and values are utterance text, not resolved values.
-
-## Documentation
-
-`README.md` is rewritten for this project: what is measured, the results
-table, the method for both schemes, setup, usage, the output format, and the
-known limitations.
+key, a response without usage, or a misaligned row raises and stops the run.
+There is no resume logic.
 
 ## Testing
 
 pytest, functional style, no mocks:
 
-- Question building: the intent question lists the 7 intents. The token
-  scheme gives one question per token, offering only the given intent's slot
-  types plus `none`, with the word and its context as labelled fields. The span
-  scheme gives one question per slot type of the intent, with deduplicated
-  span texts plus `none`, and never more than 255 options.
-- Token decoding: single-token spans, multi-token runs, `none`, and a type
-  change between adjacent tokens.
-- Span decoding: a multi-word span, `none`, and two overlapping proposals
-  where the higher-probability one wins.
-- Metrics: hand-built gold and predicted sequences with known scores.
-- Models: an `Utterance` with mismatched token and tag counts raises, and a
-  `Prediction` survives a JSON round trip unchanged.
-- Data: the real test file parses to 700 aligned rows with 7 intents, and
-  the schema derived from train covers every gold slot type in test for its
-  intent.
+- Models: alignment and length validation, JSON round trip, the parse.
+- Data: the real test split, the schema, the example pool and fixed sample,
+  and that neither contains a test utterance.
+- Questions and decoding: the intent question in both wordings, the slot
+  request's state and questions with and without examples, example payloads,
+  and tag decoding including gap filling.
+- Retrieval: ranking, per-intent and cross-intent search, and distinct
+  results.
+- Metrics and result paths.
 
-The live API path is verified by a `--limit` smoke run, not by tests.
+`predict` and the scripts' `main` functions call the live API and are
+verified by a `--limit` run, not by tests.
+
+## Known limitations
+
+- Two spans of the same slot type within two words of each other merge. No
+  gold span in the test set is affected.
+- Slot values are utterance text; nothing resolves dates or numbers.
+- Only the intent response's model version is saved per utterance.
+- On a near-tie, the saved tag is the API's choice and cannot always be
+  re-derived from the two-decimal probabilities.
 
 ## Dependencies
 
-Add `typesafe-sdk`, `huggingface-hub`, `seqeval`, `tqdm`. Replace the API key
-names in `.env.example` with `TYPESAFE_API_KEY`. Experiment tracking is not
-used: the run produces a few final numbers, which are logged and can be
-recomputed from the saved predictions.
+`typesafe-sdk`, `huggingface-hub`, `seqeval`, `scikit-learn`, `scipy`,
+`tqdm`, `pydantic`, `python-dotenv`.

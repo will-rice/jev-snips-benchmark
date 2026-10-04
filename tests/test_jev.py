@@ -9,6 +9,7 @@ from jevsnips.jev import (
     intent_examples,
     intent_question,
     labelled_examples,
+    slot_request,
     token_questions,
 )
 from jevsnips.models import Utterance
@@ -30,7 +31,7 @@ def test_intent_question_carries_descriptions_when_given() -> None:
 def test_token_questions_offer_the_intents_slots_plus_none() -> None:
     """Each token gets one question over the given slots and none."""
     slots = {"artist": None, "track": None}
-    questions = token_questions(("play", "abba"), "PlayMusic", slots, None)
+    questions = token_questions(("play", "abba"), "PlayMusic", slots, None, False)
     assert list(questions) == ["token_0", "token_1"]
     assert questions["token_0"].criteria == {
         "artist": None,
@@ -42,7 +43,7 @@ def test_token_questions_offer_the_intents_slots_plus_none() -> None:
 def test_token_questions_identify_a_word_by_the_words_around_it() -> None:
     """A repeated word is told apart by what comes before and after it."""
     questions = token_questions(
-        ("play", "the", "the"), "PlayMusic", {"artist": None}, None
+        ("play", "the", "the"), "PlayMusic", {"artist": None}, None, False
     )
     question = (
         "Which slot does `word` fill in `utterance`? Answer none if it fills no slot."
@@ -66,10 +67,34 @@ def test_token_questions_identify_a_word_by_the_words_around_it() -> None:
 def test_token_questions_carry_slot_descriptions_when_given() -> None:
     """A described slot passes its description as the option's criteria."""
     slots = {"artist": "The musician or band."}
-    questions = token_questions(("play", "abba"), "PlayMusic", slots, "Not a slot.")
+    questions = token_questions(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", False
+    )
     assert questions["token_1"].criteria == {
         "artist": "The musician or band.",
         "none": "Not a slot.",
+    }
+
+
+def test_token_questions_leave_definitions_to_the_state_when_examples_are_shown() -> (
+    None
+):
+    """With examples, options are bare and the question points at the state."""
+    slots = {"artist": "The musician or band."}
+    questions = token_questions(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", True
+    )
+    assert questions["token_1"].criteria == {"artist": None, "none": None}
+    assert questions["token_1"].instructions == {
+        "intent": "PlayMusic",
+        "words_before": "play",
+        "word": "abba",
+        "words_after": "",
+        "question": (
+            "Which slot does `word` fill in `utterance`? The slots are defined in "
+            "`slot_definitions`. Label it the way matching words are labelled in "
+            "`labelled_examples`. Answer none if it fills no slot."
+        ),
     }
 
 
@@ -157,3 +182,35 @@ def test_intent_examples_pair_each_utterance_with_its_intent() -> None:
     assert intent_examples([example]) == [
         {"utterance": "play abba", "intent": "PlayMusic"}
     ]
+
+
+def test_slot_request_without_examples_sends_only_the_utterance() -> None:
+    """Definitions stay on the options when no examples are shown."""
+    slots = {"artist": "The musician or band."}
+    state, questions = slot_request(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", None
+    )
+    assert state == {"utterance": "play abba"}
+    assert questions["token_1"].criteria == {
+        "artist": "The musician or band.",
+        "none": "Not a slot.",
+    }
+
+
+def test_slot_request_with_examples_puts_definitions_and_examples_in_the_state() -> (
+    None
+):
+    """The question points at two state keys, so both must be there."""
+    slots = {"artist": "The musician or band."}
+    example = Utterance(
+        tokens=("play", "queen"), intent="PlayMusic", tags=("O", "B-artist")
+    )
+    state, questions = slot_request(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", [example]
+    )
+    assert state == {
+        "utterance": "play abba",
+        "slot_definitions": {"artist": "The musician or band.", "none": "Not a slot."},
+        "labelled_examples": labelled_examples([example]),
+    }
+    assert questions["token_1"].criteria == {"artist": None, "none": None}

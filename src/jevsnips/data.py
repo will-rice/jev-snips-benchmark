@@ -1,4 +1,4 @@
-"""Load SNIPS utterances and the per-intent slot schema."""
+"""Load SNIPS utterances, the per-intent slot schema, and example utterances."""
 
 import csv
 import random

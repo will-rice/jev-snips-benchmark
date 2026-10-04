@@ -1,4 +1,4 @@
-"""Choose few-shot examples by similarity to the utterance being labelled."""
+"""Choose example utterances by similarity to the utterance being labelled."""
 
 from collections.abc import Mapping, Sequence
 from itertools import pairwise

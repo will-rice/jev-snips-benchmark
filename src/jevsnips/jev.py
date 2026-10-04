@@ -13,6 +13,18 @@ from jevsnips.descriptions import (
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
 from jevsnips.retrieval import ALL_INTENTS, ExampleIndex, retrieve
 
+# Every question Jev is asked, in one place for review.
+INTENT_QUESTION = "What is the intent of the utterance?"
+INTENT_QUESTION_WITH_EXAMPLES = "What is the intent of `utterance`?"
+SLOT_QUESTION = (
+    f"Which slot does `word` fill in `utterance`? Answer {NONE} if it fills no slot."
+)
+SLOT_QUESTION_WITH_EXAMPLES = (
+    "Which slot does `word` fill in `utterance`? The slots are defined in "
+    "`slot_definitions`. Label it the way matching words are labelled in "
+    f"`labelled_examples`. Answer {NONE} if it fills no slot."
+)
+
 
 def predict(
     client: TypeSafeClient,
@@ -26,7 +38,8 @@ def predict(
 
     Slots are conditioned on the predicted intent, never the gold one. Under
     names the model sees label names only. Under descriptions every intent
-    and slot is offered with its definition. Under fewshot the slot request
+    and slot is offered with its definition. When examples are shown, the
+    slot definitions move into the state beside them. Under fewshot the slot request
     also shows a fixed sample of labelled training utterances of the
     predicted intent; under retrieved it shows the ones most similar to the
     utterance instead, and the intent request shows the most similar
@@ -68,20 +81,19 @@ def predict(
         for slot in schema[intent.choice]
     }
 
-    slot_state: dict[str, JSONValue] = {"utterance": state}
-    if condition == "fewshot":
-        slot_state["labelled_examples"] = labelled_examples(examples[intent.choice])
+    shown: Sequence[Utterance] | None = None
     if retrieving:
-        slot_state["labelled_examples"] = labelled_examples(
-            retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
-        )
-    slot_response = client.system_one(
-        slot_state,
-        token_questions(
-            tokens, intent.choice, slots, NONE_DESCRIPTION if described else None
-        ),
-        model=MODEL,
+        shown = retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
+    if condition == "fewshot":
+        shown = examples[intent.choice]
+    slot_state, slot_questions = slot_request(
+        tokens,
+        intent.choice,
+        slots,
+        NONE_DESCRIPTION if described else None,
+        shown,
     )
+    slot_response = client.system_one(slot_state, slot_questions, model=MODEL)
     return Prediction(
         utterance=utterance,
         condition=condition,
@@ -114,11 +126,7 @@ def intent_question(intents: Mapping[str, str | None], keyed: bool) -> Choice:
             `utterance` key, as it is when examples are shown beside it.
     """
     return Choice(
-        instructions=(
-            "What is the intent of `utterance`?"
-            if keyed
-            else "What is the intent of the utterance?"
-        ),
+        instructions=INTENT_QUESTION_WITH_EXAMPLES if keyed else INTENT_QUESTION,
         criteria=dict(intents),
     )
 
@@ -131,11 +139,45 @@ def intent_examples(utterances: Sequence[Utterance]) -> list[JSONValue]:
     ]
 
 
+def slot_request(
+    tokens: Sequence[str],
+    intent: str,
+    slots: Mapping[str, str | None],
+    none_description: str | None,
+    examples: Sequence[Utterance] | None,
+) -> tuple[dict[str, JSONValue], dict[str, Choice]]:
+    """Build the state and questions of the slot request.
+
+    Without examples the state is the utterance alone and each option
+    carries its definition. With examples the state also holds the slot
+    definitions and the labelled examples, which the question then names.
+
+    Args:
+        tokens: The utterance's words.
+        intent: The predicted intent.
+        slots: Each slot type with its description, or None for name only.
+        none_description: The description of the none option, or None.
+        examples: Labelled utterances to show, or None to show none.
+
+    Returns:
+        The request's state and its questions, one per token.
+    """
+    state: dict[str, JSONValue] = {"utterance": " ".join(tokens)}
+    if examples is not None:
+        state["slot_definitions"] = {**slots, NONE: none_description}
+        state["labelled_examples"] = labelled_examples(examples)
+    questions = token_questions(
+        tokens, intent, slots, none_description, examples is not None
+    )
+    return state, questions
+
+
 def token_questions(
     tokens: Sequence[str],
     intent: str,
     slots: Mapping[str, str | None],
     none_description: str | None,
+    with_examples: bool,
 ) -> dict[str, Choice]:
     """Build one question per token asking which slot type it fills.
 
@@ -144,11 +186,23 @@ def token_questions(
     sentence, and which tell a repeated word apart by its context. The
     question refers to the `utterance` key of the state.
 
-    A slot's description, if any, is its option's criteria, and so is the
-    none option's: when the slots are described and none is not, the model
-    over-assigns slots to words outside any slot.
+    Without examples, a slot's description, if any, is its option's
+    criteria, and so is the none option's: when the slots are described and
+    none is not, the model over-assigns slots to words outside any slot.
+
+    Args:
+        tokens: The utterance's words.
+        intent: The predicted intent.
+        slots: Each slot type with its description, or None for name only.
+        none_description: The description of the none option, or None.
+        with_examples: Whether the state holds `labelled_examples` and
+            `slot_definitions`. The options are then bare, since the
+            definitions are in the state once instead of on every question,
+            and the question points at both.
     """
-    criteria = {**slots, NONE: none_description}
+    question = SLOT_QUESTION_WITH_EXAMPLES if with_examples else SLOT_QUESTION
+    options = {**slots, NONE: none_description}
+    criteria = dict.fromkeys(options) if with_examples else options
     return {
         f"token_{index}": Choice(
             instructions={
@@ -156,10 +210,7 @@ def token_questions(
                 "words_before": " ".join(tokens[:index]),
                 "word": token,
                 "words_after": " ".join(tokens[index + 1 :]),
-                "question": (
-                    "Which slot does `word` fill in `utterance`? "
-                    f"Answer {NONE} if it fills no slot."
-                ),
+                "question": question,
             },
             criteria=criteria,
         )
