@@ -29,6 +29,7 @@ module-name = ["jevsnips"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["jevsnips"]
+known-third-party = ["wandb"]
 
 [tool.ruff.lint]
 select = ["C", "E", "F", "I", "W", "D", "N", "B", "PTH", "ANN"]
