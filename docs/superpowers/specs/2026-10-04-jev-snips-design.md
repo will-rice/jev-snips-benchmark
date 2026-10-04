@@ -26,14 +26,21 @@ predictions saved for later analysis.
 - Verified on the test split: 700 rows, 7 intents, 39 slot types, 1790 slot
   spans, at most 24 tokens, no token/tag misalignment, and no two adjacent
   spans of the same slot type.
+- Each intent uses a small subset of the slot types: between 2
+  (`SearchCreativeWork`) and 14 (`BookRestaurant`). Every slot type that an
+  intent uses in test also appears with that intent in train.
 
 ## Scope
 
 In scope: zero-shot evaluation of Jev on the SNIPS test split.
 
 Out of scope: label descriptions, few-shot examples, the candidate-span
-extraction scheme, baselines, and the train split. Each would be a separate
-ablation; any prompt development for them must use train, never test.
+extraction scheme, gold-intent (oracle) slot filling, and baselines. Each
+would be a separate ablation; any prompt development for them must use train,
+never test.
+
+The train split is used only to derive each intent's slot schema. No train
+utterance is sent to the model.
 
 ## Design
 
@@ -58,18 +65,31 @@ stop the run instead of being recorded as a wrong answer.
 tokens (`input.split()`), an intent, and gold BIO tags (`slots.split()`). It
 raises if a row's token and tag counts differ.
 
-Label inventories come from the label files, dropping `PAD` and `UNK`. Slot
-types are the distinct tag names with the `B-`/`I-` prefix removed.
+The intent inventory comes from `intent_labels.txt`, dropping `PAD` and
+`UNK`.
+
+The slot schema maps each intent to the slot types that occur with it in the
+train split, read from the `intent` and `slots` columns with the `B-`/`I-`
+prefix removed. This is the assistant's schema (which slots an intent
+accepts), the same information a deployed NLU system is configured with.
+Train has one row whose token and tag counts differ; the schema reads tags
+only, so the alignment check applies to the evaluated split.
 
 ### Questions
 
-One request per utterance. `state` is the utterance text. Questions:
+Two requests per utterance, both with the utterance text as `state`.
 
-- `intent`: a `Choice` whose options are the 7 intent names.
-- `token_{i}` for each token index `i`: a `Choice` whose options are the 39
-  slot types plus `none`. The instructions show the utterance with token `i`
-  in brackets, for example `add sabrina [salerno] to the grime instrumentals
-  playlist`, so repeated words are unambiguous.
+1. Intent: one `Choice` named `intent` whose options are the 7 intent names.
+2. Slots, given the predicted intent: one `Choice` named `token_{i}` per
+   token index `i`, whose options are that intent's slot types plus `none`.
+   The instructions name the intent and show the utterance with token `i` in
+   brackets, for example `add sabrina [salerno] to the grime instrumentals
+   playlist`, so repeated words are unambiguous.
+
+Slots are conditioned on the predicted intent, never the gold intent, so no
+label leaks into the slot or frame metrics. An intent error therefore offers
+the wrong slot options and usually costs the slots too, which is how a real
+pipeline behaves.
 
 All option descriptions are `None`: the model sees label names only. This is
 the zero-shot condition and nothing is tuned against the test set.
@@ -99,7 +119,7 @@ prediction function over the split with a `ThreadPoolExecutor` and `tqdm`.
 
 Output is `results/{split}.jsonl`, one record per utterance: tokens, gold
 intent and tags, predicted intent and tags, per-question probabilities, token
-usage, and the model version the API returned. Metrics, token totals, and the
+usage summed over both requests, and the model version the API returned. Metrics, token totals, and the
 returned model version are logged to wandb and with `logging.info`.
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
@@ -115,13 +135,15 @@ repeat, so there is no resume logic.
 
 pytest, functional style, no mocks:
 
-- Question building: one intent question plus one question per token, with
-  the right options and the bracketed token in the instructions.
+- Question building: the intent question lists the 7 intents; the slot
+  questions give one question per token, offering only the given intent's
+  slot types plus `none`, with the bracketed token in the instructions.
 - Decoding: single-token spans, multi-token runs, `none`, and a type change
   between adjacent tokens.
 - Metrics: hand-built gold and predicted sequences with known scores.
-- Data: the real test file parses to 700 aligned rows with 7 intents and 39
-  slot types.
+- Data: the real test file parses to 700 aligned rows with 7 intents, and
+  the schema derived from train covers every gold slot type in test for its
+  intent.
 
 The live API path is verified by a `--limit` smoke run, not by tests.
 
