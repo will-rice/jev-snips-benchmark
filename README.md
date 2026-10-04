@@ -1,6 +1,6 @@
 # Jev on SNIPS
 
-Zero-shot evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's
+Zero-shot and few-shot evaluation of [Jev](https://docs.typesafe.ai), TypeSafe AI's
 "System One" decision model, on the SNIPS natural language understanding
 benchmark: intent detection and slot filling.
 
@@ -30,14 +30,14 @@ What the numbers say:
   descriptions add under a point. Supervised models trained on the 13,084
   SNIPS training utterances reach roughly 98–99%.
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
-  in the slots, not the intent: on utterances where both conditions got the
+  in the slots, not the intent: on utterances where every condition got the
   intent right, slot F1 goes from 61.5 to 78.7.
 - **A few labelled examples add another 3 points.** Showing 32 training
   utterances of the predicted intent lifts slot F1 from 76.4 to 79.7 and
   frame accuracy from 49.9 to 54.3, for 1.9 times the slot tokens. The gain
   is uneven: slots with a few fixed values jump (`object_part_of_series_type`
   17 to 86, `current_location` 62 to 100, `movie_type` 75 to 99), titles
-  barely move (`track` 41 to 42, `album` 27 to 29), and one slot falls
+  barely move (`track` 41 to 42, `album` 26 to 29), and one slot falls
   (`object_location_type` 85 to 46).
 - **Token classification beats the extraction patterns in the Jev docs** by
   4 to 10 points of slot F1, at about 60% of the tokens. See the next table.
@@ -48,9 +48,9 @@ What the numbers say:
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
-  The weakest slots in every condition are titles and names that only
-  context can tell apart: with few-shot, `album` (29), `entity_name` (41),
-  `track` (42), `movie_name` (50), `object_name` (56).
+  With few-shot, the weakest slots are mostly titles and names that only
+  context can tell apart: `album` (29), `entity_name` (40), `track` (42),
+  `object_location_type` (46), `movie_name` (50), `object_name` (56).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -110,8 +110,8 @@ same type join it, so the small words inside a title stay in its span.
 Only the slot types of the **predicted** intent are offered, the way an
 assistant's schema restricts which slots an intent accepts. The gold intent
 is never used, so an intent error costs the slots as well. The mapping from
-intent to slot types is read from the training split's labels; no training
-utterance is sent to the model.
+intent to slot types is read from the training split's labels. Under names
+and descriptions no training utterance is sent to the model.
 
 ### Conditions
 
@@ -274,7 +274,9 @@ A limited run writes to its own files and leaves the full results in place.
 Each run is committed as `results/test-{condition}-run{n}.jsonl`, one record
 per utterance: the tokens and gold labels, the condition, the predicted
 intent and its probabilities, the predicted slot tags, the probabilities of
-every word's options, and the input tokens used.
+every word's options, and the input tokens used. The API reports
+probabilities to two decimals, so on a near-tie the saved tag is the API's
+choice and cannot always be re-derived from the saved probabilities.
 
 Each record also carries a `parse` in the shape of a Snips NLU result:
 

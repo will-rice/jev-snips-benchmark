@@ -15,7 +15,10 @@ including the ones that are not in the benchmark code.
   share of utterances with every tag correct. Tokens are mean input tokens
   per utterance.
 - **Model:** `jev-1.13.0`. Single runs; run-to-run noise is about half a
-  point, so differences under one point are not meaningful.
+  point, so differences under one point are not meaningful. Formulation 6
+  was run several times as the reference for later experiments: its two
+  dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
+  Each table quotes the run made alongside that experiment.
 - The **benchmark** runs formulation 6, token classification, and nothing
   else. Everything else here was a throwaway script, except formulation 12,
   which was a second benchmark method until it was removed.
@@ -251,8 +254,8 @@ word that points to the work without naming it, or the kind of work."}`
   that to 13% and nearly doubled F1 (rows 1 and 3). Where it sits in the
   list made no difference (rows 2 and 4).
 - **Brackets inside a sentence are a poor way to point at a word.** The same
-  question with the word and its context as labelled fields gained 8.5
-  points (rows 5 and 6). The docs say Jev is trained on structure and reads
+  question with the word and its context as labelled fields gained about
+  10 points on the same half of the dev set (rows 5 and 6). The docs say Jev is trained on structure and reads
   instructions literally.
 - **Feeding earlier labels back did not help.** It gave a small gain while
   `none` was broken (rows 1 and 7) and hurt once it was fixed (rows 3 and 9,

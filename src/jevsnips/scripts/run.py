@@ -1,4 +1,4 @@
-"""Evaluate Jev zero-shot on the SNIPS test set."""
+"""Evaluate Jev on the SNIPS test set under one condition."""
 
 import argparse
 import logging

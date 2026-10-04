@@ -1,4 +1,4 @@
-"""Compare the saved runs of the names and descriptions conditions."""
+"""Compare the saved runs of every condition."""
 
 import logging
 from typing import get_args

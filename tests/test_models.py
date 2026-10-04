@@ -13,7 +13,7 @@ def test_utterance_rejects_misaligned_tokens_and_tags() -> None:
 
 
 def test_prediction_rejects_tags_of_the_wrong_length() -> None:
-    """A scheme's tags must cover every token of the utterance."""
+    """The slot tags must cover every token of the utterance."""
     utterance = Utterance(tokens=("play", "music"), intent="PlayMusic", tags=("O", "O"))
     short = SlotPrediction(tags=("O",), probabilities={}, input_tokens=1)
     with pytest.raises(ValidationError, match="1 slot tags for 2 tokens"):
