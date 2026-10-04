@@ -7,7 +7,7 @@ from typesafe_sdk import Choice, JSONValue, SystemOneResponse, TypeSafeClient
 from jevsnips.config import MAX_GAP, MODEL, NONE, RETRIEVED_EXAMPLES
 from jevsnips.descriptions import (
     INTENT_DESCRIPTIONS,
-    NONE_DESCRIPTION,
+    NONE_DESCRIPTIONS,
     SLOT_DESCRIPTIONS,
 )
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
@@ -90,7 +90,7 @@ def predict(
         tokens,
         intent.choice,
         slots,
-        NONE_DESCRIPTION if described else None,
+        NONE_DESCRIPTIONS[intent.choice] if described else None,
         shown,
     )
     slot_response = client.system_one(slot_state, slot_questions, model=MODEL)

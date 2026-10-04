@@ -81,10 +81,13 @@ intent error costs the slots as well.
 `Condition` is one of four values.
 
 - `names`: option descriptions are `None`.
-- `descriptions`: every intent and slot option carries its one-sentence
-  definition from `descriptions.py`, keyed by intent and slot, and `none`
-  carries `NONE_DESCRIPTION`. Definitions were written from label names and
-  the training split only and contain no example values.
+- `descriptions`: every intent and slot option carries its definition from
+  `descriptions.py`, keyed by intent and slot, and `none` carries that
+  intent's entry in `NONE_DESCRIPTIONS`. A slot's definition says what a
+  single word must be to count as part of the slot, names typical words, and
+  states SNIPS's boundary conventions. They were written and revised against
+  training utterances only (200 per intent, confirmed on 700 others and on
+  the dev set).
 - `fewshot`: the intent request is as in `descriptions`. The slot request's
   state holds `utterance`, `slot_definitions` (each slot's definition, and
   `none`'s), and `labelled_examples` (the fixed sample for the predicted

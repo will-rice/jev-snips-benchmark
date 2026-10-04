@@ -8,29 +8,36 @@ Jev, with its score, including the ones that are not in the benchmark code.
 The benchmark ended up with token classification (formulation 6), examples
 shown with a label for every word (41), retrieved by TF-IDF similarity for
 the slot request (46) and for the intent request (57), with the slot
-definitions in the state and the question pointing at the examples (65). On
-the test set that takes slot F1 from 59.7 with label names alone to 89.4.
+definitions in the state and the question pointing at the examples (65),
+and a definition for every slot written about one word at a time (72). On
+the test set that takes slot F1 from 59.7 with label names alone to 86.1
+with definitions and 90.7 with retrieved examples.
 
 The path there, in the order it was walked:
 
-| Step                                                                | Test slot F1 |
-| ------------------------------------------------------------------- | ------------ |
-| Per-word question with a bracketed word, label names only           | 26.0         |
-| The same with label descriptions                                    | 32.1         |
-| Per-slot question over candidate spans, with descriptions           | 72.2         |
-| Per-word question as labelled fields, `none` described, gaps filled | 76.4         |
-| 32 fixed examples, slots shown as whole values                      | 79.7         |
-| 32 fixed examples, every word labelled                              | 83.5         |
-| 8 examples retrieved by similarity, for the slot request            | 86.2         |
-| Retrieved examples for the intent request as well                   | 86.9         |
-| Slot definitions in the state, question pointing at the examples    | 89.4         |
+| Step                                                                          | Test slot F1 |
+| ----------------------------------------------------------------------------- | ------------ |
+| Per-word question with a bracketed word, label names only                     | 26.0         |
+| The same with label descriptions                                              | 32.1         |
+| Per-slot question over candidate spans, with descriptions                     | 72.2         |
+| Per-word question as labelled fields, `none` described, gaps filled           | 76.4         |
+| 32 fixed examples, slots shown as whole values                                | 79.7         |
+| 32 fixed examples, every word labelled                                        | 83.5         |
+| 8 examples retrieved by similarity, for the slot request                      | 86.2         |
+| Retrieved examples for the intent request as well                             | 86.9         |
+| Slot definitions in the state, question pointing at the examples              | 89.4         |
+| Every definition rewritten, word by word, with a `none` definition per intent | 90.7         |
 
 Things that were tried and did not help: feeding earlier labels back,
 hiding the words to the right, `what` / `not_for` rubrics, a `stated` yes/no
 per slot, reading the top few words of a per-slot question, repairing span
 boundaries after the fact, more than eight retrieved examples,
 deduplicating the retrieval pool, embedding similarity, reordering the slot
-options, and a yes/no per adjacent word pair.
+options, a yes/no per adjacent word pair, and rewording the question.
+
+The largest single gain came late and from the least exotic change: writing
+the slot definitions properly. With no examples shown, slot F1 on test went
+from 76.4 to 86.1.
 
 The sections below are grouped by kind of formulation, not by date.
 
@@ -51,7 +58,8 @@ The sections below are grouped by kind of formulation, not by date.
   was run several times as the reference for later experiments: its two
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
-- The **benchmark** code contains formulations 6, 57, 65, and 67.
+- The **benchmark** code contains formulations 57, 65, 67, and 72 (6 with
+  rewritten definitions).
   Everything else here was a throwaway script, except formulations that
   were in the benchmark for a time and then superseded: 12 (a second slot
   method), 35 and 41 (earlier few-shot formats), and 46 (the retrieved slot
@@ -361,6 +369,88 @@ utterance. Intent descriptions are kept. Dev set, 700 utterances.
   utterance; 12% of utterances retrieve one that differs by a single word.
 - Jev with examples beats both Jev alone and a vote among the examples (row
   59), so it is weighing them, not copying.
+
+### Rewriting every definition
+
+Until this point every experiment used the first set of definitions: one
+sentence per slot saying what the slot is ("The title of the album to
+play."), and one `none` definition shared by all intents. They had been
+written once and never revisited.
+
+**Setup.** New training-only splits, disjoint from the dev set and the test
+set: per intent, 200 "search" utterances to write against and 100 "check"
+utterances to confirm on. The per-word question is unchanged. Scores use
+the gold intent.
+
+**Question wording first.** Seven wordings of the per-word question were
+scored on 500 training utterances. None beat the current one (79.0): the
+alternatives scored 64.7 to 78.0. Four wordings of the shared `none`
+definition ranged from 77.5 to 80.0.
+
+**A partial rewrite.** Rewriting 14 definitions for the most confused slots
+scored 82.9 on dev and 82.1 slot F1 and 60.8 frame accuracy on test. It was
+not kept, because it left the other 39 definitions as first drafts.
+
+**The full pass.** For each intent: read the word-level errors on its
+search utterances, write a definition for every slot and a `none`
+definition for that intent, score, and revise once more against the errors
+that remained. The definitions follow three rules that came out of the
+errors:
+
+- Say what one word must be, since the question is about one word: "A word
+  of the title of an album", not "The title of the album".
+- Name typical words, and the words that look similar but do not count:
+  `music_item` is "song, track, album ... Not the general words music,
+  songs, tunes".
+- State SNIPS's boundary conventions: "The word playlist or list that
+  follows the name is not part of it"; "In this current book only current
+  counts".
+
+Slot F1 and share of utterances with every word right, on each intent's 200
+search utterances:
+
+| Intent               | One-sentence definitions | First full pass | Second pass |
+| -------------------- | ------------------------ | --------------- | ----------- |
+| AddToPlaylist        | 64.4, 34%                | 81.1, 64%       | 83.3, 67%   |
+| BookRestaurant       | 84.0, 63%                | 87.4, 67%       | 88.9, 72%   |
+| GetWeather           | 84.7, 70%                | 92.7, 85%       | 93.5, 86%   |
+| PlayMusic            | 76.9, 39%                | 89.2, 76%       | 91.3, 81%   |
+| RateBook             | 87.5, 59%                | 92.7, 77%       | 93.1, 78%   |
+| SearchCreativeWork   | 76.6, 62%                | 85.7, 73%       | 86.2, 73%   |
+| SearchScreeningEvent | 62.6, 37%                | 90.1, 78%       | 89.8, 78%   |
+
+On utterances not used for writing, all intents together, gold intent:
+
+| #   | Definitions                                       | Check set (700) | Dev set (700) | Tokens |
+| --- | ------------------------------------------------- | --------------- | ------------- | ------ |
+| 6   | One sentence per slot, shared `none`              | 78.2, 52%       | 76.3, 50%     | 3,013  |
+| 70  | 14 definitions rewritten                          | —               | 82.9, 62%     | 3,398  |
+| 72  | **Every definition rewritten, `none` per intent** | 90.3, 76%       | 89.5, 76%     | 5,791  |
+| 73  | 72 held once in the state, options bare           | —               | 88.5, 72%     | 2,172  |
+
+- **72** is the benchmark's definitions. Test, three runs each, against the
+  previous definitions:
+
+  | Condition    | Slot F1      | Frame accuracy | Slot input tokens      |
+  | ------------ | ------------ | -------------- | ---------------------- |
+  | Descriptions | 76.4 to 86.1 | 49.9 to 68.6   | 2,113,624 to 4,065,054 |
+  | Few-shot     | 84.4 to 87.2 | 64.8 to 72.4   | 5,905,086 to 6,113,746 |
+  | Retrieved    | 89.4 to 90.7 | 75.7 to 78.6   | 2,440,043 to 2,649,167 |
+
+- With definitions alone the benchmark now scores about what 32 fixed
+  examples used to add, and fixed examples add little on top (86.1 to
+  87.2). Retrieved examples still add 4.6 points.
+- The descriptions condition nearly doubles in tokens, because longer
+  definitions are sent with every word. Holding them in the state (73) costs
+  a point of slot F1 and four of frame accuracy for 62% fewer tokens; the
+  benchmark keeps them on the options when no examples are shown.
+- What still resists, by the search-set errors: telling an album title from
+  a track title with nothing in the utterance to say which; whether a
+  leading "the" belongs to a title, which SNIPS labels both ways; places
+  that could be a city or a point of interest.
+- The definitions were written against labelled training utterances and
+  contain typical values and dataset conventions. The descriptions condition
+  shows no example utterances, but it is not free of knowledge of the data.
 
 ### A full read of the Jev docs
 
