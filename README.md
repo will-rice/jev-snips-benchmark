@@ -31,7 +31,7 @@ What the numbers say:
 
 - **Intent detection needs almost nothing.** Names alone give 94.3%, and
   descriptions add under a point. Supervised models trained on the 13,084
-  SNIPS training utterances reach roughly 98–99%.
+  SNIPS training utterances reach 98.6% (Joint BERT, below).
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
   in the slots, not the intent: on utterances where every condition got the
   intent right, slot F1 goes from 61.5 to 78.7.
@@ -63,13 +63,20 @@ What the numbers say:
   description, 60 once `none` was described, 68 with short gaps filled, and
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
-- **It is still well short of a trained tagger** (roughly 96–97% slot F1).
+- **It is still well short of a trained tagger** (97.0 slot F1, below).
   In every condition with examples, the weakest slots are titles and names
   that only context can tell apart. With retrieved examples: `album` (36),
   `entity_name` (49), `movie_name` (50), `track` (53), `object_name` (59).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
+
+For reference, a supervised model fine-tuned on the full training split,
+[Joint BERT](https://arxiv.org/abs/1902.10909) (Chen et al., 2019), reports
+98.6 intent accuracy, 97.0 slot F1, and 92.8 frame accuracy on this test
+set. The gap is the cost of not training: that model has learned SNIPS's
+phrasing, slot vocabulary, and annotation conventions from 13,084 labelled
+utterances, 64 of which repeat a test utterance.
 
 Input tokens per run, mean of three runs:
 
