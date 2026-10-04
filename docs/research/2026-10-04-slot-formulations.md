@@ -52,9 +52,11 @@ The sections below are grouped by kind of formulation, not by date.
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
 - The **benchmark** code contains formulations 6, 57, 65, and 67.
-  Everything else here was a throwaway script, except formulation 12, which
-  was a second benchmark method until it was removed, and formulation 35,
-  which was the first few-shot format.
+  Everything else here was a throwaway script, except formulations that
+  were in the benchmark for a time and then superseded: 12 (a second slot
+  method), 35 and 41 (earlier few-shot formats), and 46 (the retrieved slot
+  request before 65). Their test figures below are from when they were
+  current.
 - The dev set is drawn from the same split as the few-shot examples, and it
   overstated every example-based gain. Each change was confirmed on the test
   set before it was kept; test figures are given where they exist.
@@ -259,15 +261,17 @@ on the whole dev set whose first word was labelled `none`.
 | 43  | 32 utterances, every word as a bare `[word, label]` pair     | 81.2        | 126        | 6,169  |
 | 44  | 32 utterances, whole values and bare per-word pairs together | 85.3        | 117        | 8,840  |
 
-- **41** is the benchmark's `fewshot` condition. Test, three runs: 83.5 slot
-  F1 (83.4–83.6), 61.9 frame accuracy (61.6–62.3), 6.61M slot input tokens
-  per run. `object_location_type` is back to 87, and the first word of a
-  multi-word slot is labelled `none` in 118 of 780 cases in run 1.
-- The test gain over descriptions is 7.1 points; the dev set predicted 8.8.
+- **41** was the benchmark's `fewshot` condition until 67 replaced it. Test,
+  three runs: 83.5 slot F1 (83.4–83.6), 61.9 frame accuracy (61.6–62.3),
+  6.61M slot input tokens per run. `object_location_type` was back to 87,
+  and the first word of a multi-word slot was labelled `none` in 118 of 780
+  cases in run 1.
+- For 41, the test gain over descriptions was 7.1 points; the dev set
+  predicted 8.8.
 - Bare pairs (43) are worse than whole values. The labelled keys carry the
   meaning; the docs say Jev is trained on structure.
-- An example in 41: `{"utterance": "play the best of abba", "words":
-[{"word": "play", "slot": "none"}, {"word": "the", "slot": "album"}, ...]}`.
+- An example in 41 is the utterance text plus a `words` list with one
+  `{"word": "the", "slot": "album"}` entry per word.
 
 ### Choosing the examples
 
@@ -292,15 +296,15 @@ dev halves.
 | 50  | 32 fixed utterances, no descriptions                                          | 84.7        | 63%             | 7,834  |
 | 51  | No Jev: copy each word's most common label from the 8 most similar utterances | 72.0        | 29%             | 0      |
 
-- **46** is the slot half of the benchmark's `retrieved` condition. Test,
-  three runs with the intent predicted from descriptions alone: 86.2 slot F1
-  (85.9–86.5), 68.2 frame accuracy (67.9–68.6), 3.14M slot input tokens per
-  run. With retrieved examples for the intent as well (row 57), it is 86.9
-  and 69.5. The pool on test is the
+- **46** was the slot half of the benchmark's `retrieved` condition until
+  65 replaced it. Test, three runs with the intent predicted from
+  descriptions alone: 86.2 slot F1 (85.9–86.5), 68.2 frame accuracy
+  (67.9–68.6), 3.14M slot input tokens per run. With retrieved examples for
+  the intent as well (row 57), it was 86.9 and 69.5. The pool on test is the
   12,833 distinct aligned training utterances whose text is not a test
   utterance.
-- The test gain over fixed few-shot is 2.7 points; the dev set predicted
-  4.2. Dev utterances come from the same split as the pool, so their nearest
+- For 46 against 41, the test gain over fixed few-shot was 2.7 points; the
+  dev set predicted 4.2. Dev utterances come from the same split as the pool, so their nearest
   neighbours are closer than a test utterance's.
 - On dev the nearest example has a mean cosine of 0.51 with the utterance,
   and 4% of utterances have one at 0.8 or above, so this is not copying from
@@ -338,10 +342,10 @@ utterance. Intent descriptions are kept. Dev set, 700 utterances.
 | 58  | Descriptions and the 16 most similar utterances      | 98.7                | 9     | 1,006  |
 | 59  | No Jev: the most common intent of the 8 most similar | 93.7                | 44    | 0      |
 
-- **57** is now part of the benchmark's `retrieved` condition. Test, three
-  runs: intent accuracy 96.1 (27 wrong of 700, identical in all three runs)
-  against 95.1 without examples; slot F1 86.9 (86.7–87.2) against 86.2;
-  frame accuracy 69.5 (69.0–70.4) against 68.2. Intent input tokens rise
+- **57** is the intent half of the benchmark's `retrieved` condition. Test,
+  three runs, with slot request 46: intent accuracy 96.1 (27 wrong of 700,
+  identical in all three runs) against 95.1 without examples; slot F1 86.9
+  (86.7–87.2) against 86.2; frame accuracy 69.5 (69.0–70.4) against 68.2. Intent input tokens rise
   from 336,703 to 524,801 per run.
 - The dev set overstated the gain again: 2.6 points there, 1.0 on test.
 - Of the 27 intent errors left on test, 26 are among three intents that
@@ -514,7 +518,7 @@ word that points to the work without naming it, or the kind of work."}`
 - **Tell the question what the state is for.** With examples and slot
   definitions in the state, naming them in the question with backticks added
   2.5 points of slot F1 and 6 of frame accuracy on test, and moving the
-  definitions there cut tokens by 22% (rows 63–65).
+  definitions there cut slot tokens by 22% (rows 63–65).
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.

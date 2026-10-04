@@ -67,38 +67,37 @@ utterance.
 1. **Intent.** One `Choice` named `intent` over the 7 intents. State is the
    utterance text.
 2. **Slots.** One `Choice` named `token_{i}` per word over the predicted
-   intent's slot types plus `none`, in one request. State is
-   `{"utterance": text}`. Instructions are the object `{intent,
-words_before, word, words_after, question}` with the question "Which slot
-   does `word` fill in `utterance`? Answer none if it fills no slot."
+   intent's slot types plus `none`, in one request. Instructions are an
+   object with the keys `intent`, `words_before`, `word`, `words_after`, and
+   `question`. Without examples, the state is `{"utterance": text}` and the
+   question is "Which slot does `word` fill in `utterance`? Answer none if
+   it fills no slot." The example conditions change both; see below.
 
 Slots are conditioned on the predicted intent, never the gold intent, so an
 intent error costs the slots as well.
 
 ### Conditions
 
-`Condition` is one of four values. Each adds to the one before it, except
-that `retrieved` replaces `fewshot`'s fixed examples.
+`Condition` is one of four values.
 
 - `names`: option descriptions are `None`.
 - `descriptions`: every intent and slot option carries its one-sentence
   definition from `descriptions.py`, keyed by intent and slot, and `none`
   carries `NONE_DESCRIPTION`. Definitions were written from label names and
   the training split only and contain no example values.
-- `fewshot`: as `descriptions` for the intent request. The slot request's
-  state holds `slot_definitions` (each slot's definition, and `none`'s) and
-  `labelled_examples` (the fixed sample for the predicted intent); its
-  options carry no descriptions; and its question is "Which slot does `word`
-  fill in `utterance`? The slots are defined in `slot_definitions`. Label it
-  the way matching words are labelled in `labelled_examples`. Answer none if
-  it fills no slot."
-- `retrieved`: as `descriptions`, and both requests' states hold
-  `labelled_examples` chosen for the utterance. The intent request shows the
-  `RETRIEVED_EXAMPLES = 8` most similar pool utterances of any intent, and
-  its state becomes `{"utterance", "labelled_examples"}` with the question
-  "What is the intent of `utterance`?". The slot request is as in `fewshot`,
-  with the 8 most similar pool utterances of the predicted intent as its
-  examples.
+- `fewshot`: the intent request is as in `descriptions`. The slot request's
+  state holds `utterance`, `slot_definitions` (each slot's definition, and
+  `none`'s), and `labelled_examples` (the fixed sample for the predicted
+  intent). Its options carry no descriptions, and its question is "Which
+  slot does `word` fill in `utterance`? The slots are defined in
+  `slot_definitions`. Label it the way matching words are labelled in
+  `labelled_examples`. Answer none if it fills no slot."
+- `retrieved`: the intent request keeps the option descriptions, and its
+  state becomes `{"utterance", "labelled_examples"}` with the
+  `RETRIEVED_EXAMPLES = 8` most similar pool utterances of any intent and
+  the question "What is the intent of `utterance`?". The slot request is as
+  in `fewshot`, with the 8 most similar pool utterances of the predicted
+  intent as its examples.
 
 Example shapes:
 
@@ -178,8 +177,8 @@ pytest, functional style, no mocks:
 - Data: the real test split, the schema, the example pool and fixed sample,
   and that neither contains a test utterance.
 - Questions and decoding: the intent question in both wordings, the slot
-  question's fields and options, example payloads, and tag decoding
-  including gap filling.
+  request's state and questions with and without examples, example payloads,
+  and tag decoding including gap filling.
 - Retrieval: ranking, per-intent and cross-intent search, and distinct
   results.
 - Metrics and result paths.

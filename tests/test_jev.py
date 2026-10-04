@@ -9,6 +9,7 @@ from jevsnips.jev import (
     intent_examples,
     intent_question,
     labelled_examples,
+    slot_request,
     token_questions,
 )
 from jevsnips.models import Utterance
@@ -181,3 +182,35 @@ def test_intent_examples_pair_each_utterance_with_its_intent() -> None:
     assert intent_examples([example]) == [
         {"utterance": "play abba", "intent": "PlayMusic"}
     ]
+
+
+def test_slot_request_without_examples_sends_only_the_utterance() -> None:
+    """Definitions stay on the options when no examples are shown."""
+    slots = {"artist": "The musician or band."}
+    state, questions = slot_request(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", None
+    )
+    assert state == {"utterance": "play abba"}
+    assert questions["token_1"].criteria == {
+        "artist": "The musician or band.",
+        "none": "Not a slot.",
+    }
+
+
+def test_slot_request_with_examples_puts_definitions_and_examples_in_the_state() -> (
+    None
+):
+    """The question points at two state keys, so both must be there."""
+    slots = {"artist": "The musician or band."}
+    example = Utterance(
+        tokens=("play", "queen"), intent="PlayMusic", tags=("O", "B-artist")
+    )
+    state, questions = slot_request(
+        ("play", "abba"), "PlayMusic", slots, "Not a slot.", [example]
+    )
+    assert state == {
+        "utterance": "play abba",
+        "slot_definitions": {"artist": "The musician or band.", "none": "Not a slot."},
+        "labelled_examples": labelled_examples([example]),
+    }
+    assert questions["token_1"].criteria == {"artist": None, "none": None}

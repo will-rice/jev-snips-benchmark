@@ -81,21 +81,19 @@ def predict(
         for slot in schema[intent.choice]
     }
 
-    none_description = NONE_DESCRIPTION if described else None
-    slot_state: dict[str, JSONValue] = {"utterance": state}
-    with_examples = condition in ("fewshot", "retrieved")
-    if with_examples:
-        slot_state["slot_definitions"] = {**slots, NONE: none_description}
-        slot_state["labelled_examples"] = labelled_examples(
-            retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
-            if retrieving
-            else examples[intent.choice]
-        )
-    slot_response = client.system_one(
-        slot_state,
-        token_questions(tokens, intent.choice, slots, none_description, with_examples),
-        model=MODEL,
+    shown: Sequence[Utterance] | None = None
+    if retrieving:
+        shown = retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
+    if condition == "fewshot":
+        shown = examples[intent.choice]
+    slot_state, slot_questions = slot_request(
+        tokens,
+        intent.choice,
+        slots,
+        NONE_DESCRIPTION if described else None,
+        shown,
     )
+    slot_response = client.system_one(slot_state, slot_questions, model=MODEL)
     return Prediction(
         utterance=utterance,
         condition=condition,
@@ -141,6 +139,39 @@ def intent_examples(utterances: Sequence[Utterance]) -> list[JSONValue]:
     ]
 
 
+def slot_request(
+    tokens: Sequence[str],
+    intent: str,
+    slots: Mapping[str, str | None],
+    none_description: str | None,
+    examples: Sequence[Utterance] | None,
+) -> tuple[dict[str, JSONValue], dict[str, Choice]]:
+    """Build the state and questions of the slot request.
+
+    Without examples the state is the utterance alone and each option
+    carries its definition. With examples the state also holds the slot
+    definitions and the labelled examples, which the question then names.
+
+    Args:
+        tokens: The utterance's words.
+        intent: The predicted intent.
+        slots: Each slot type with its description, or None for name only.
+        none_description: The description of the none option, or None.
+        examples: Labelled utterances to show, or None to show none.
+
+    Returns:
+        The request's state and its questions, one per token.
+    """
+    state: dict[str, JSONValue] = {"utterance": " ".join(tokens)}
+    if examples is not None:
+        state["slot_definitions"] = {**slots, NONE: none_description}
+        state["labelled_examples"] = labelled_examples(examples)
+    questions = token_questions(
+        tokens, intent, slots, none_description, examples is not None
+    )
+    return state, questions
+
+
 def token_questions(
     tokens: Sequence[str],
     intent: str,
@@ -155,9 +186,9 @@ def token_questions(
     sentence, and which tell a repeated word apart by its context. The
     question refers to the `utterance` key of the state.
 
-    A slot's description, if any, is its option's criteria, and so is the
-    none option's: when the slots are described and none is not, the model
-    over-assigns slots to words outside any slot.
+    Without examples, a slot's description, if any, is its option's
+    criteria, and so is the none option's: when the slots are described and
+    none is not, the model over-assigns slots to words outside any slot.
 
     Args:
         tokens: The utterance's words.

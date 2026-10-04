@@ -56,7 +56,7 @@ run three times. The ranges are at most one point.
 - **Which examples matters more than how many.** The 8 training utterances
   most similar to the one being labelled score 89.4 slot F1 against 84.4
   for 32 fixed ones, at 41% of the slot tokens. Part of that is the better
-  intent, which retrieved examples lift from 95.1 to 96.1; on utterances
+  intent, 96.1 with retrieved examples against 95.0; on utterances
   where every condition got the intent right it is 91.5 against 87.1.
 - **Retrieval uses the whole training split.** It draws on 12,833 distinct
   training utterances, where few-shot uses 224. SNIPS is templated: 12% of
@@ -72,8 +72,8 @@ run three times. The ranges are at most one point.
   The same 32 examples scored 79.7 on test shown as whole slot values and
   83.5 with every word labelled. And telling the question to use the
   examples, with the slot definitions moved into the state beside them,
-  took the retrieved condition from 86.9 to 89.4 while cutting its tokens
-  by 22%.
+  took the retrieved condition from 86.9 to 89.4 while cutting its slot
+  tokens by 22%.
 - **Token classification beats the extraction patterns in the Jev docs** by
   4 to 10 points of slot F1, at about 60% of the tokens. See the next
   section.
@@ -139,7 +139,7 @@ out of the options into the state, under `slot_definitions`, where they are
 sent once instead of once per word, and the question becomes "Which slot
 does `word` fill in `utterance`? The slots are defined in
 `slot_definitions`. Label it the way matching words are labelled in
-`labelled_examples`."
+`labelled_examples`. Answer none if it fills no slot."
 
 Decoding turns the per-word classes into spans: adjacent words with the same
 type form one span, and up to two unlabelled words between two words of the
@@ -160,7 +160,8 @@ intent to slot types is read from the training split's labels.
 | Retrieved    | As descriptions, plus the 8 most similar examples from any intent | Slot names; definitions and the 8 most similar examples of the predicted intent in the state |
 
 - **Descriptions** are one-sentence definitions from `descriptions.py`,
-  passed as each option's description. Slots are described per intent,
+  passed as each option's description, or held in the state when examples
+  are shown. Slots are described per intent,
   because one slot name can mean different things (`object_type` is a kind
   of book under `RateBook` and a showtime listing under
   `SearchScreeningEvent`). They were written from the label names and the
@@ -205,9 +206,10 @@ docs give guidance, the benchmark follows it, with two deliberate exceptions.
 
 - **Followed:** one narrow judgment per question; labelled fields instead of
   string templates; backticked references to the parts of the state a
-  question should use; a described no-match option; reference material in
-  the state; only relevant context in the state (8 retrieved examples, not
-  32 fixed ones); a pinned model version (`jev-1.13.0`, not the `jev-latest`
+  question should use; a no-match option with its own definition; reference
+  material in the state; in the best condition, only relevant context in
+  the state (8 retrieved examples, where few-shot shows 32 fixed ones); a
+  pinned model version (`jev-1.13.0`, not the `jev-latest`
   alias); all of a word-level request's questions in one call.
 - **Tested and found not to matter:** the docs warn that Jev leans toward
   the first option and say to reorder and check. Reversing or shuffling the
@@ -262,7 +264,7 @@ per utterance.
 | The same, the question pointing at the examples                                                           | 90.3 §      | 4,616  |
 | The same, slot definitions once in the state instead of on every option                                   | 90.6 §      | 3,343  |
 | Both of those together (**the retrieved condition**)                                                      | 91.4 §      | 3,478  |
-| 8 most similar, slot options reversed or shuffled                                                         | 88.7–88.9 § | 4,481  |
+| 8 most similar, slot options reversed or shuffled                                                         | 88.9 §      | 4,481  |
 | 8 most similar, plus a yes/no per adjacent word pair to join words                                        | 88.8 §      | 5,297  |
 | 16 most similar utterances                                                                                | 89.4 ‡      | 5,981  |
 | 32 most similar utterances                                                                                | 89.6 ‡      | 9,048  |
