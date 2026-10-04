@@ -181,3 +181,16 @@ def test_input_tokens_raises_when_the_response_has_no_usage() -> None:
     response = SystemOneResponse(model="jev-1.13.0", usage=Usage(), answers={})
     with pytest.raises(ValueError, match="no input token usage"):
         input_tokens(response)
+
+
+def test_decode_tokens_chains_fills_across_several_gaps() -> None:
+    """Each filled word can anchor the next gap in the same slot."""
+    choices = ["track", "none", "track", "none", "track", "none"]
+    assert decode_tokens(choices) == (
+        "B-track",
+        "I-track",
+        "I-track",
+        "I-track",
+        "I-track",
+        "O",
+    )

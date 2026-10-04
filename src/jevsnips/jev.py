@@ -118,8 +118,8 @@ def token_questions(
     question refers to the `utterance` key of the state.
 
     A slot's description, if any, is its option's criteria, and so is the
-    none option's: without one, the model gives most words outside a slot a
-    slot anyway.
+    none option's: when the slots are described and none is not, the model
+    over-assigns slots to words outside any slot.
     """
     criteria = {**slots, NONE: none_description}
     return {

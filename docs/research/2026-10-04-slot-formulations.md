@@ -39,7 +39,9 @@ words with the same type form one span.
   with descriptions.
 - **6** is the current **benchmark** token scheme. Test: 59.7 with names,
   76.4 with descriptions.
-- Row 5 was tuned on half the dev set and is reported on the other half.
+- Row 5 was tuned on half the dev set and is reported on the other half,
+  where row 6 scores 77.8. Like for like, labelled fields gain about 10
+  points over row 5, not 8.5.
 
 Question wording:
 

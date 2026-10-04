@@ -41,8 +41,8 @@ What the numbers say:
 - **How the question is posed matters as much as what is asked.** On a
   held-out dev set, the same per-word question scored 32 slot F1 when the
   word was marked with brackets inside a sentence and `none` had no
-  description, 60 once `none` was described, and 76 once the word and its
-  context were given as labelled fields. See [What we tried](#what-we-tried).
+  description, 60 once `none` was described, 68 with short gaps filled, and
+  76 once the word and its context were given as labelled fields. See [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
   With descriptions, the token scheme is weakest on titles and names that
   only context can tell apart: `object_part_of_series_type` (17), `album`
@@ -52,7 +52,7 @@ Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point, so the
 differences between rows are far outside the noise.
 
-Input tokens per run:
+Input tokens per run, mean of three runs:
 
 | Condition    | Intent  | Token scheme | Span scheme |
 | ------------ | ------- | ------------ | ----------- |
@@ -61,7 +61,8 @@ Input tokens per run:
 
 ## Method
 
-Each utterance gets three requests, all with the utterance as state.
+Each utterance gets three requests, all with the utterance as state (the
+token scheme passes it under an `utterance` key).
 
 1. **Intent.** One `Choice` over the 7 intents.
 2. **Token scheme.** One `Choice` per word over the intent's slot types plus
@@ -88,8 +89,9 @@ training utterance is sent to the model.
 - **Names.** The model sees intent names, slot names, and span texts only.
 - **Descriptions.** Every intent and slot also carries a one-sentence
   definition from `descriptions.py`. In the token scheme it is the option's
-  description, and `none` has one too ("not part of any slot value");
-  without it, more than half the words outside any slot were given a slot.
+  description, and `none` has one too ("not part of any slot value"). On
+  the dev set, with the earlier bracketed question, leaving `none`
+  undescribed gave a slot to more than half the words outside any slot.
   In the span scheme, where the options are spans, it is added
   to the question. Slots are described per intent, because one slot name can
   mean different things (`object_type` is a kind of book under `RateBook` and
@@ -160,8 +162,8 @@ What we learned:
 
 - Each word has exactly one class, and asking for it directly is the best
   formulation once it is posed well.
-- `none` needs a description like every other option. Without one, 55% of
-  the words outside any slot were given a slot.
+- `none` needs a description like every other option. Without one, the
+  bracketed question gave a slot to 55% of the words outside any slot.
 - Marking a word with brackets inside a sentence is a poor way to point at
   it. Labelled fields gained 8.5 points on the same question.
 - Showing earlier labels, or hiding the words to the right, did not help.

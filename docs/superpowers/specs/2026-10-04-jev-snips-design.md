@@ -234,7 +234,7 @@ pytest, functional style, no mocks:
 
 - Question building: the intent question lists the 7 intents. The token
   scheme gives one question per token, offering only the given intent's slot
-  types plus `none`, with the bracketed token in the instructions. The span
+  types plus `none`, with the word and its context as labelled fields. The span
   scheme gives one question per slot type of the intent, with deduplicated
   span texts plus `none`, and never more than 255 options.
 - Token decoding: single-token spans, multi-token runs, `none`, and a type
