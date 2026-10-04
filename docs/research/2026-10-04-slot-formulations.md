@@ -233,6 +233,53 @@ on the whole dev set whose first word was labelled `none`.
 - An example in 41: `{"utterance": "play the best of abba", "words":
 [{"word": "play", "slot": "none"}, {"word": "the", "slot": "album"}, ...]}`.
 
+### Choosing the examples
+
+Prompted by the in-context example selection literature (KATE, Liu et al.
+2021; retrieval for few-shot intent and slot filling, Yu et al. 2021), which
+finds that examples similar to the input beat a fixed or random set.
+
+Formulation 41 with the examples chosen per utterance: the `k` training
+utterances of the intent most similar to it, by TF-IDF cosine over words and
+adjacent word pairs. The pool is every aligned training utterance of the
+intent that is not in the dev set (about 1,750 per intent). Mean of the two
+dev halves.
+
+| #   | Formulation                                                                   | Dev slot F1 | All slots right | Tokens |
+| --- | ----------------------------------------------------------------------------- | ----------- | --------------- | ------ |
+| 41  | 32 fixed utterances (for reference)                                           | 85.3        | 64%             | 9,250  |
+| 45  | 4 most similar utterances                                                     | 87.6        | 70%             | 3,739  |
+| 46  | **8 most similar utterances**                                                 | 89.5        | 75%             | 4,474  |
+| 47  | 16 most similar utterances                                                    | 89.4        | 75%             | 5,981  |
+| 48  | 32 most similar utterances                                                    | 89.6        | 75%             | 9,048  |
+| 49  | 8 most similar utterances, no descriptions                                    | 89.0        | 75%             | 3,059  |
+| 50  | 32 fixed utterances, no descriptions                                          | 84.7        | 63%             | 7,834  |
+| 51  | No Jev: copy each word's most common label from the 8 most similar utterances | 72.0        | 29%             | 0      |
+
+- **46** is the benchmark's `retrieved` condition. Test, three runs with the
+  predicted intent: 86.2 slot F1 (86.1–86.3), 68.0 frame accuracy
+  (67.6–68.3), 3.13M slot input tokens per run. The pool on test is the
+  13,019 aligned training utterances whose text is not a test utterance.
+- The test gain over fixed few-shot is 2.7 points; the dev set predicted
+  4.2. Dev utterances come from the same split as the pool, so their nearest
+  neighbours are closer than a test utterance's.
+- On dev the nearest example has a mean cosine of 0.51 with the utterance,
+  and 4% of utterances have one at 0.8 or above, so this is not copying from
+  exact near-duplicates. Row 51 confirms it: label copying from the same
+  examples is 17.5 points behind.
+- SNIPS utterances are templated, though. On test, 84 of the 700 utterances
+  (12%) retrieve at least one example exactly one word away ("what movies
+  are playing at mann theatres" against "... amc theatres"), and most of
+  those examples have the same tag sequence. The top-1 cosine on test has
+  mean 0.50, with 4.4% at 0.8 or above and none at 1.0.
+- The pool keeps the training split's repeated utterances (186 repeated
+  texts), so 18% of test utterances are shown the same example twice among
+  their 8. Removing repeats would change the condition and was not run.
+- Descriptions add about half a point once examples are shown (46 against
+  49, 41 against 50), which is within the noise on the dev set.
+- Eight examples are enough. More than eight does not help, and with
+  retrieval the fixed sample's cost can be halved.
+
 ### One question per slot, options are words
 
 Each slot type gets a `Choice` over the numbered words plus `none`
@@ -309,6 +356,10 @@ word that points to the work without naming it, or the kind of work."}`
   their slot values they cost far less than example values repeated on
   every option (rows 35 and 38); with every word labelled they cost about
   as much as 16 example values per option (rows 41 and 39).
+- **Which examples matters more than how many.** Eight examples chosen by
+  similarity to the utterance beat 64 chosen at random, at about a quarter
+  of the tokens (rows 46 and 42), and descriptions become nearly redundant.
+  This uses the whole training split as a retrieval pool.
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.
@@ -341,9 +392,13 @@ word that points to the work without naming it, or the kind of work."}`
 - `what` / `not_for` rubrics on the span scheme, where sibling confusion is
   the main error. They were only tried on the token scheme.
 - `examples` in the option rubrics.
-- Several example samples on test, to measure how much few-shot depends on
-  which utterances are drawn, and choosing examples similar to the utterance
-  instead of at random.
+- Several example samples on test, to measure how much fixed few-shot
+  depends on which utterances are drawn.
+- Retrieval with a smaller pool (for example 50 or 200 examples per intent),
+  to see how much of the gain needs the whole training split.
+- Retrieval by embedding similarity instead of TF-IDF.
+- `names` and `fewshot`/`retrieved` without descriptions on test, for a
+  full two-by-two of descriptions and examples.
 - Using the top-k reading for confident slots and the span question for the
   rest.
 - Treating slots with a few fixed values (`rating_unit`, `object_select`,

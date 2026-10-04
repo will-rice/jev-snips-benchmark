@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 from pydantic.alias_generators import to_camel
 from seqeval.metrics.sequence_labeling import get_entities
 
-Condition = Literal["names", "descriptions", "fewshot"]
+Condition = Literal["names", "descriptions", "fewshot", "retrieved"]
 
 
 class Utterance(BaseModel, frozen=True):

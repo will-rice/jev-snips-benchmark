@@ -239,6 +239,16 @@ section's statements that few-shot is out of scope and that no training
 utterance is sent to the model; the latter still holds for the names and
 descriptions conditions.
 
+## Retrieved condition
+
+A fourth condition, `retrieved`, is the few-shot condition with the examples
+chosen per utterance: the `RETRIEVED_EXAMPLES = 8` training utterances of
+the predicted intent most similar to it, by TF-IDF cosine over words and
+adjacent word pairs (`retrieval.py`, scikit-learn). The pool is
+`load_example_pool()`: every aligned training utterance whose text does not
+appear in the evaluated split. `load_examples()` samples the fixed few-shot
+set from the same pool.
+
 ## Snips-style parse
 
 Each `Prediction` has a computed `parse`: the predicted intent with its
