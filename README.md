@@ -39,7 +39,7 @@ Input tokens per run, mean of three runs:
 | Retrieved    | 2,658,401 | 2,645,952 |
 
 Jev's answers are not identical between runs, which is why each condition is
-run three times. The ranges are at most one point.
+run three times. The ranges are at most 1.3 points.
 
 ### What the numbers say
 
@@ -50,7 +50,7 @@ run three times. The ranges are at most one point.
   intent and no slots, descriptions scored 95.1 and retrieved 96.2; with
   the slots, 95.6 and 96.9. It costs 2.1M more input tokens per run: the
   seven intents' options now hold every slot definition.
-- **Definitions are worth 26 points of slot F1, if they are written with
+- **Definitions are worth 27 points of slot F1, if they are written with
   care.** With a definition for every slot, slot F1 goes from 59.7 to 86.8
   and frame accuracy from 30.0 to 69.5, with no example utterance shown. A
   first set of one-sentence definitions ("The title of the album to play.")
@@ -121,9 +121,11 @@ the descriptions condition, three runs each.
   is at least 0.5.
 - Both ask about each slot type separately, so sibling types such as `city`
   and `state` claim the same words and code has to pick a winner by
-  probability. After that, 18% (extraction) and 22% (function calling) of
-  the slot types an utterance uses are left unfilled, against 4% for token
-  classification, which puts the slot types in one distribution per word.
+  probability, with ties going to the slot whose name sorts last. After
+  that, on utterances with the intent right, 18% (extraction) and 22%
+  (function calling) of the slot types an utterance uses are left unfilled,
+  against 4% for token classification, which puts the slot types in one
+  distribution per word.
 - The comparison is not between equal efforts. The per-word definitions
   were revised against training utterances. The patterns use a
   one-sentence definition and a question pair per slot (`spec.py`); their
@@ -227,6 +229,11 @@ its own labels. Supervised results on SNIPS include them in training.
 
 Two spans of the same slot type separated by two words or fewer are merged
 into one. That affects none of the test set's 1,790 gold slot spans.
+
+In the two docs patterns an option is a span's text, so a text that occurs
+twice in an utterance ("5 out of 5") can only be placed at its first
+position, and the longest spans of an utterance over 22 words are not
+offered. That affects 1 of the 1,790 gold spans and one utterance.
 
 Slot values are the words of the utterance. Nothing resolves a value such as
 a time expression into a structured value.

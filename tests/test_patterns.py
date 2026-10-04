@@ -157,3 +157,33 @@ def test_decode_function_ranks_an_overlap_by_its_least_certain_judgement() -> No
         "B-track",
         "I-track",
     )
+
+
+def test_decode_function_fills_a_slot_stated_at_exactly_the_threshold() -> None:
+    """Probabilities have two decimals, so 0.50 occurs and counts as stated."""
+    answers = {
+        "artist": choice("abba", 0.9),
+        "artist?": {"type": "noul", "noul": 0.5},
+    }
+    assert decode_function(TOKENS, response(answers)) == ("O", "B-artist", "O")
+
+
+def test_decode_function_lets_a_weak_value_lose_to_a_stronger_pair() -> None:
+    """A confident stated answer does not carry an unsure value."""
+    answers = {
+        "artist": choice("abba", 0.6),
+        "artist?": {"type": "noul", "noul": 0.9},
+        "track": choice("abba now", 0.7),
+        "track?": {"type": "noul", "noul": 0.7},
+    }
+    assert decode_function(TOKENS, response(answers)) == (
+        "O",
+        "B-track",
+        "I-track",
+    )
+
+
+def test_decode_extraction_breaks_a_tie_by_slot_name() -> None:
+    """Equal scores are common at two decimals; the later name wins."""
+    answers = {"track": choice("abba", 1.0), "artist": choice("abba now", 1.0)}
+    assert decode_extraction(TOKENS, response(answers)) == ("O", "B-track", "O")

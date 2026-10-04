@@ -60,11 +60,12 @@ The sections below are grouped by kind of formulation, not by date.
   was run several times as the reference for later experiments: its two
   dev halves scored 76.2 and 77.8 in one run and 75.3 and 77.7 in another.
   Each table quotes the run made alongside that experiment.
-- The **benchmark** code contains formulations 57, 65, 67, and 72 (6 with
-  rewritten definitions).
+- The **benchmark** code contains formulations 57, 65, 67, 72 (6 with
+  rewritten definitions), 78 (intent options with their slots), and the
+  docs' two patterns as comparison conditions, 81 and 84.
   Everything else here was a throwaway script, except formulations that
   were in the benchmark for a time and then superseded: 12 (a second slot
-  method), 35 and 41 (earlier few-shot formats), and 46 (the retrieved slot
+  method, back as 81), 35 and 41 (earlier few-shot formats), and 46 (the retrieved slot
   request before 65). Their test figures below are from when they were
   current.
 - The dev set is drawn from the same split as the few-shot examples, and it
@@ -90,7 +91,8 @@ words with the same type form one span.
 - **1** was the first benchmark version. Test: 26.0 slot F1 with names, 32.1
   with descriptions.
 - **6** is the current **benchmark** token scheme. Test: 59.7 with names,
-  76.4 with descriptions.
+  76.4 with the one-sentence descriptions it was first run with (86.8 with
+  the current definitions, 72 and 78).
 - Row 5 was tuned on half the dev set and is reported on the other half,
   where row 6 scores 77.8. Like for like, labelled fields gain about 10
   points over row 5, not 8.5.
@@ -138,8 +140,8 @@ plus `none`. Overlapping answers are resolved by probability.
 | 17  | As 12, asked only for slots a word-level question says are present | 75.3        | —               | ~4,000 |
 
 - **12** follows the docs' extraction cookbook (code supplies candidates,
-  Jev picks one or `none`). It was a second benchmark method and was
-  removed. Test, three runs: 48.3 slot F1 with names, 72.2 with
+  Jev picks one or `none`). It was a second benchmark method, was removed,
+  and is back as the `extraction` condition (81). Test at the time, three runs: 48.3 slot F1 with names, 72.2 with
   descriptions (frame accuracy 19.3 and 40.5), at 3.65M input tokens per
   run against 2.11M for token classification.
 - Row 17 was estimated from saved answers by removing spans, without
@@ -647,7 +649,7 @@ half of the dev set; all three rows are scored on the second half.
 
 | #   | Formulation                                                                                                     | Dev slot F1 | All slots right | Tokens |
 | --- | --------------------------------------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
-| 6   | One-sentence descriptions (the benchmark)                                                                       | 77.8        | 51%             | 2,954  |
+| 6   | One-sentence descriptions (then the benchmark)                                                                  | 77.8        | 51%             | 2,954  |
 | 24  | `what` plus `not_for` naming the sibling slots                                                                  | 77.1        | 50%             | 4,354  |
 | 25  | As 24, plus "every word counts" on multi-word slots and a `not_for` on `none` for words inside names and titles | 75.8        | 49%             | 5,128  |
 

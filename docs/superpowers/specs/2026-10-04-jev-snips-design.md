@@ -24,6 +24,8 @@ with per-utterance predictions saved for later analysis.
   optional description) and returns `choice`, `probabilities`, and
   `confidence`. Instructions, criteria values, and state may each be a
   string or a JSON structure.
+- A `Noul` question takes `instructions` and returns `noul`, the
+  probability of yes.
 - Access is the `typesafe-sdk` package:
   `TypeSafeClient().system_one(state, questions)`, authenticated by
   `TYPESAFE_API_KEY`, with built-in retry and backoff.
@@ -149,7 +151,8 @@ one, the shape of the function-calling cookbook's spec.
   probability.
 
 `place_spans` places proposals from the highest score down and drops one
-that overlaps a span already placed.
+that overlaps a span already placed. Equal scores go to the slot whose name
+sorts last.
 
 ### Decoding
 
@@ -232,6 +235,9 @@ verified by a `--limit` run, not by tests.
 
 - Two spans of the same slot type within two words of each other merge. No
   gold span in the test set is affected.
+- In the docs patterns a repeated text can only be placed at its first
+  position (1 of 1,790 gold spans), and an utterance over 22 words is not
+  offered its longest spans (one test utterance).
 - Slot values are utterance text; nothing resolves dates or numbers.
 - Only the intent response's model version is saved per utterance.
 - On a near-tie, the saved tag is the API's choice and cannot always be

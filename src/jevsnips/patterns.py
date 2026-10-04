@@ -117,7 +117,8 @@ def place_spans(
 
     Slots are asked about separately, so two can claim the same words. The
     highest score is placed first and a span that overlaps a placed one is
-    dropped.
+    dropped. Scores have two decimals and often tie; a tie goes to the slot
+    whose name sorts last, an arbitrary but fixed rule.
     """
     spans = candidate_spans(tokens)
     tags = ["O"] * len(tokens)
