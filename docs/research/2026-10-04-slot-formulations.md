@@ -284,6 +284,27 @@ dev halves.
   labels; the first copy's labels are the ones shown. The dev-set rows above
   were measured before this change.
 
+### How similarity is measured
+
+Formulation 46 with a different similarity for choosing the 8 examples.
+Embeddings are of the utterance text, L2-normalised, compared by cosine.
+The hybrid adds the embedding cosine to the TF-IDF cosine. The pool is
+deduplicated. Both dev halves are shown, since the differences are small.
+
+| #   | Similarity                                           | Dev slot F1, half A / B | All slots right, A / B |
+| --- | ---------------------------------------------------- | ----------------------- | ---------------------- |
+| 46  | **TF-IDF over words and word pairs** (the benchmark) | 88.6 / 90.3             | 72% / 77%              |
+| 52  | Embedding, `sentence-transformers/all-MiniLM-L6-v2`  | 87.7 / 88.8             | 70% / 73%              |
+| 53  | Embedding, `BAAI/bge-base-en-v1.5`                   | 88.4 / 88.5             | 72% / 73%              |
+| 54  | Hybrid of 46 and 52                                  | 87.7 / 90.3             | 70% / 77%              |
+
+- Embedding similarity is about a point below TF-IDF, which is close to the
+  noise on this dev set. It is not better, and it would add a model download
+  and a PyTorch dependency, so it was not adopted or run on test.
+- Retrieval is already restricted to one intent, so candidates share a
+  topic. What makes an example useful is the wording around the slot, which
+  word-pair overlap matches directly.
+
 ### One question per slot, options are words
 
 Each slot type gets a `Choice` over the numbered words plus `none`
@@ -400,7 +421,6 @@ word that points to the work without naming it, or the kind of work."}`
   depends on which utterances are drawn.
 - Retrieval with a smaller pool (for example 50 or 200 examples per intent),
   to see how much of the gain needs the whole training split.
-- Retrieval by embedding similarity instead of TF-IDF.
 - `names` and `fewshot`/`retrieved` without descriptions on test, for a
   full two-by-two of descriptions and examples.
 - Using the top-k reading for confident slots and the span question for the

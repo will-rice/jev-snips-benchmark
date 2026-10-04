@@ -216,6 +216,7 @@ per utterance.
 | 8 most similar utterances (**the retrieved condition**)                   | 89.5 ‡      | 4,474  |
 | 16 most similar utterances                                                | 89.4 ‡      | 5,981  |
 | 32 most similar utterances                                                | 89.6 ‡      | 9,048  |
+| 8 most similar utterances by embedding similarity (two models tried)      | 88.3–88.5 ‡ | 4,520  |
 | 8 most similar utterances, no descriptions                                | 89.0 ‡      | 3,059  |
 | 32 fixed utterances with every word labelled, no descriptions             | 84.7 ‡      | 7,834  |
 | Copy each word's label from the 8 most similar utterances, without Jev    | 72.0        | 0      |
@@ -262,6 +263,9 @@ What we learned:
   cost about twice the tokens for the same gain. Labelling every word costs
   more again (about as much as 16 example values per option) and is the
   most accurate.
+- Similarity by shared words and word pairs is as good as embedding
+  similarity here, and needs no model. Retrieval is already limited to one
+  intent, so what matters is the wording around the slot.
 - Which examples matters more than how many. Eight chosen by similarity
   beat 64 chosen at random, and more than eight adds nothing.
 - With examples, descriptions add about half a point; without examples they
