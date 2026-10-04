@@ -110,6 +110,32 @@ from the probabilities instead of the top choice alone.
   settings were tuned on the other half.
 - The top word lies inside the gold span for 92.4% of present slots.
 
+### Option rubrics for the token scheme
+
+Formulation 6 with each slot option's description replaced by an object, as
+in the docs' "Advanced: structure" page. `not_for` lines were written from
+the label names, train values, and the word-level confusions on the first
+half of the dev set; all three rows are scored on the second half.
+
+| #   | Formulation                                                                                                     | Dev slot F1 | All slots right | Tokens |
+| --- | --------------------------------------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
+| 6   | One-sentence descriptions (the benchmark)                                                                       | 77.8        | 51%             | 2,954  |
+| 24  | `what` plus `not_for` naming the sibling slots                                                                  | 77.1        | 50%             | 4,354  |
+| 25  | As 24, plus "every word counts" on multi-word slots and a `not_for` on `none` for words inside names and titles | 75.8        | 49%             | 5,128  |
+
+Word-level errors on the second half of the dev set:
+
+| #   | Word outside a slot given a slot | Slot word labelled `none` | Slot word given another slot |
+| --- | -------------------------------- | ------------------------- | ---------------------------- |
+| 6   | 78                               | 212                       | 83                           |
+| 24  | 70                               | 211                       | 97                           |
+| 25  | 107                              | 110                       | 101                          |
+
+Example of a rubric option (row 25), for `object_name` under `RateBook`:
+`{"what": "The title of the work being rated. Every word of it counts,
+including small words such as articles and prepositions.", "not_for": "A
+word that points to the work without naming it, or the kind of work."}`
+
 ## What we learned
 
 - **Per-word labelling is the right shape, once it is posed well.** Each word
@@ -134,6 +160,13 @@ from the probabilities instead of the top choice alone.
   It is the cheapest formulation by a wide margin.
 - **Splitting extraction into locate-then-extend lost to both simpler
   formulations** (row 23).
+- **`what` / `not_for` rubrics did not help the token scheme.** Sibling
+  confusions were never its main error: on the dev set, slot words labelled
+  `none` (mostly small words inside titles) outnumber sibling mix-ups by more
+  than two to one. Naming the siblings in `not_for` left every error type
+  about where it was and cost 47% more tokens (row 24). Telling Jev that
+  every word of a title counts halved the missed title words but pulled
+  more outside words into slots, for a net loss (row 25).
 - **The span scheme's errors are mostly sibling confusions.** Each slot is
   asked separately, so `city` and `state` both claim "mt" and code picks a
   winner. On the test set it proposed a span for a slot the utterance does
@@ -144,8 +177,9 @@ from the probabilities instead of the top choice alone.
 
 - Chunk first (a yes/no per gap between words), then one `Choice` per chunk.
 - A yes/no presence gate per slot before the span question.
-- Option rubrics with `what` / `not_for` / `examples`, as in the docs'
-  "Advanced: structure" page, to separate sibling slots.
+- `what` / `not_for` rubrics on the span scheme, where sibling confusion is
+  the main error. They were only tried on the token scheme.
+- `examples` in the option rubrics.
 - Example values from the training split in the descriptions (few-shot).
 - Using the top-k reading for confident slots and the span question for the
   rest.
