@@ -2,11 +2,19 @@
 
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, computed_field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 from seqeval.metrics.sequence_labeling import get_entities
 
-Condition = Literal["names", "descriptions", "fewshot", "retrieved"]
+Condition = Literal[
+    "names", "descriptions", "fewshot", "retrieved", "extraction", "function_calling"
+]
 
 
 class Utterance(BaseModel, frozen=True):
@@ -30,6 +38,21 @@ class SlotPrediction(BaseModel, frozen=True):
     tags: tuple[str, ...]
     probabilities: dict[str, dict[str, float]]
     input_tokens: int
+
+    @field_validator("probabilities")
+    @classmethod
+    def omit_zeros(
+        cls, probabilities: dict[str, dict[str, float]]
+    ) -> dict[str, dict[str, float]]:
+        """Keep only the options a question gave any probability.
+
+        Jev reports probabilities to two decimals, so an omitted option is
+        one it scored 0.00.
+        """
+        return {
+            question: {option: p for option, p in options.items() if p > 0}
+            for question, options in probabilities.items()
+        }
 
 
 class ParsedIntent(BaseModel, frozen=True):

@@ -3,9 +3,11 @@
 import pytest
 from typesafe_sdk import SystemOneResponse, Usage
 
+from jevsnips.descriptions import INTENT_DESCRIPTIONS, SLOT_DESCRIPTIONS
 from jevsnips.jev import (
     decode_tokens,
     input_tokens,
+    intent_definitions,
     intent_examples,
     intent_question,
     labelled_examples,
@@ -23,9 +25,10 @@ def test_intent_question_offers_each_intent_without_descriptions() -> None:
 
 
 def test_intent_question_carries_descriptions_when_given() -> None:
-    """A described intent passes its description as the option's criteria."""
-    question = intent_question({"PlayMusic": "Play music."}, False)
-    assert question.criteria == {"PlayMusic": "Play music."}
+    """A described intent passes its definition as the option's criteria."""
+    definition = {"what": "Play music.", "slots": {"artist": "A performer."}}
+    question = intent_question({"PlayMusic": definition}, False)
+    assert question.criteria == {"PlayMusic": definition}
 
 
 def test_token_questions_offer_the_intents_slots_plus_none() -> None:
@@ -214,3 +217,13 @@ def test_slot_request_with_examples_puts_definitions_and_examples_in_the_state()
         "labelled_examples": labelled_examples([example]),
     }
     assert questions["token_1"].criteria == {"artist": None, "none": None}
+
+
+def test_intent_definitions_describe_each_intent_and_its_slots() -> None:
+    """An intent option says what the intent is and which slots it takes."""
+    definitions = intent_definitions(["RateBook", "SearchCreativeWork"])
+    assert list(definitions) == ["RateBook", "SearchCreativeWork"]
+    assert definitions["SearchCreativeWork"] == {
+        "what": INTENT_DESCRIPTIONS["SearchCreativeWork"],
+        "slots": SLOT_DESCRIPTIONS["SearchCreativeWork"],
+    }

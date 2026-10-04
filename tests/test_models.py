@@ -68,3 +68,13 @@ def test_prediction_parse_is_a_snips_style_result() -> None:
             {"value": "tonight", "entity": "timeRange", "slotName": "timeRange"},
         ],
     }
+
+
+def test_slot_prediction_omits_options_given_no_probability() -> None:
+    """A span question has up to 255 options, nearly all scored 0.00."""
+    slots = SlotPrediction(
+        tags=("O",),
+        probabilities={"artist": {"abba": 0.9, "play": 0.0, "none": 0.1}},
+        input_tokens=1,
+    )
+    assert slots.probabilities == {"artist": {"abba": 0.9, "none": 0.1}}

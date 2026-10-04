@@ -9,9 +9,10 @@ The benchmark ended up with token classification (formulation 6), examples
 shown with a label for every word (41), retrieved by TF-IDF similarity for
 the slot request (46) and for the intent request (57), with the slot
 definitions in the state and the question pointing at the examples (65),
-and a definition for every slot written about one word at a time (72). On
-the test set that takes slot F1 from 59.7 with label names alone to 86.1
-with definitions and 90.7 with retrieved examples.
+a definition for every slot written about one word at a time (72), and
+intent options that carry their slots' definitions (78). On the test set
+that takes slot F1 from 59.7 with label names alone to 86.8 with
+definitions and 91.2 with retrieved examples.
 
 The path there, in the order it was walked:
 
@@ -27,10 +28,11 @@ The path there, in the order it was walked:
 | Retrieved examples for the intent request as well                             | 86.9         |
 | Slot definitions in the state, question pointing at the examples              | 89.4         |
 | Every definition rewritten, word by word, with a `none` definition per intent | 90.7         |
+| Intent options that include their slots' definitions                          | 91.2         |
 
 Things that were tried and did not help: feeding earlier labels back,
 hiding the words to the right, `what` / `not_for` rubrics, a `stated` yes/no
-per slot, reading the top few words of a per-slot question, repairing span
+per slot in place of a `none` option, reading the top few words of a per-slot question, repairing span
 boundaries after the fact, more than eight retrieved examples,
 deduplicating the retrieval pool, embedding similarity, reordering the slot
 options, a yes/no per adjacent word pair, and rewording the question.
@@ -452,6 +454,98 @@ On utterances not used for writing, all intents together, gold intent:
   contain typical values and dataset conventions. The descriptions condition
   shows no example utterances, but it is not free of knowledge of the data.
 
+### Intent definitions that describe the slots
+
+The intent request had kept its first definitions, one sentence per intent,
+while the slots got full ones. What separates neighbouring intents is mostly
+which slots an utterance fills, so the intent options were given the slot
+definitions too. Zero-shot intent request, accuracy on the training-only
+search (1,400) and check (700) utterances:
+
+| #   | Intent option                                                          | Search | Check |
+| --- | ---------------------------------------------------------------------- | ------ | ----- |
+| —   | One sentence per intent (as before)                                    | 96.57  | 96.43 |
+| 74  | `{"what": sentence, "slots": the first one-sentence slot definitions}` | 96.50  | —     |
+| 75  | `{"what": sentence, "slots": [slot names]}`                            | 96.43  | —     |
+| 76  | One paragraph: the sentence, then the slots listed in prose            | 97.00  | —     |
+| 77  | `{"what": sentence, "slots": the full slot definitions}`               | 97.36  | 97.29 |
+| 78  | **77 with `what` rewritten to say what tells the intent apart**        | 97.86  | 97.57 |
+| 79  | The rewritten `what` alone                                             | 97.71  | 97.00 |
+
+- Slot names, or one-sentence slot definitions, do nothing (74, 75). The
+  full word-level definitions do (77): they say which words signal a slot.
+- The rewritten `what` states the boundary with the neighbouring intents,
+  for example `SearchCreativeWork`: "Choose this when the request gives only
+  a title, with or without its kind, even if it says play, listen or watch,
+  and names no artist, streaming service, cinema or showtime."
+- **78** is in the benchmark. Test, three runs each, against one sentence
+  per intent:
+
+  | Condition    | Intent accuracy | Slot F1      | Frame accuracy | Intent input tokens  |
+  | ------------ | --------------- | ------------ | -------------- | -------------------- |
+  | Descriptions | 95.1 to 95.6    | 86.1 to 86.8 | 68.6 to 69.5   | 336,703 to 2,470,303 |
+  | Few-shot     | 95.0 to 95.6    | 87.2 to 87.7 | 72.4 to 73.0   | 336,703 to 2,470,303 |
+  | Retrieved    | 96.2 to 96.9    | 90.7 to 91.2 | 78.6 to 79.4   | 524,801 to 2,658,401 |
+
+- The gain on test is about half the gain on the training splits, and it
+  costs 2.1M input tokens per run, because the seven options now hold all
+  53 slot definitions.
+- What is left is mostly `SearchScreeningEvent` read as `SearchCreativeWork`
+  ("find fish story") and `SearchCreativeWork` read as `PlayMusic`. Several
+  of these are ambiguous or mislabelled in SNIPS.
+
+### The docs' patterns in the benchmark code
+
+Formulations 12 and 26 had been run with throwaway scripts. They are now
+conditions of the benchmark, `extraction` and `function_calling`
+(`patterns.py`), so their implementation is tested and their runs are saved
+like every other condition's. `spec.py` holds, per slot, the one-sentence
+definition from the first set of definitions and the question pair written
+for formulation 26.
+
+Wordings were compared on the dev set with the gold intent before the test
+runs:
+
+| #   | Pattern          | Value question                                                                  | Dev slot F1 | All slots right | Tokens |
+| --- | ---------------- | ------------------------------------------------------------------------------- | ----------- | --------------- | ------ |
+| 80  | Extraction       | The question about the idea only ("Which musician or band ...?")                | 67.6        | 29%             | 4,999  |
+| 81  | Extraction       | **Formulation 12's sentence: intent, slot name, definition, "Answer none ..."** | 75.1        | 46%             | 5,224  |
+| 82  | Extraction       | Labelled fields `{"question", "definition"}`                                    | 69.7        | 31%             | 5,171  |
+| 83  | Extraction       | Idea question, definition, "Answer none if the utterance does not say."         | 71.5        | 36%             | 5,156  |
+| 84  | Function calling | **Idea question followed by the definition, plus `stated`**                     | 70.7        | 32%             | 5,046  |
+| 85  | Function calling | Formulation 12's sentence without the `none` clause, plus `stated`              | 71.6        | 37%             | 5,107  |
+
+- **81** and **84** are in the code. 85 scores a point higher than 84 but
+  names the question after the parameter, which the function-calling
+  cookbook says not to do; 84 keeps to the cookbook.
+- Naming the slot and defining it is worth 7.5 points to the extraction
+  pattern (80 against 81). The cookbook's advice to ask about the idea and
+  not the parameter name fits its closed sets, where each option has its
+  own description. With spans as options the question is the only place a
+  definition can go.
+- Test, three runs each, with the benchmark's intent request:
+
+  | Condition                           | Slot F1          | Frame accuracy   | Slot input tokens |
+  | ----------------------------------- | ---------------- | ---------------- | ----------------- |
+  | Descriptions (token classification) | 86.8 (86.6–86.9) | 69.5 (69.3–69.9) | 4,062,064         |
+  | `extraction`                        | 72.7 (72.5–72.8) | 41.5 (41.1–41.7) | 3,750,174         |
+  | `function_calling`                  | 69.6 (69.2–69.9) | 32.5 (31.7–33.0) | 3,626,549         |
+
+- A first test run of both patterns with the bare idea question (80, and 26
+  as originally written) scored 66.8 and 66.9.
+- On utterances with the intent right, the decoded output leaves 18.5%
+  (extraction) and 22.2% (function calling) of the slot types an utterance
+  uses unfilled, and fills 4.4% and 5.7% of the ones it does not use. Token
+  classification: 4.2% and 2.7%.
+- The efforts are not equal. The per-word definitions were revised against
+  training utterances; the patterns' definitions are the first drafts.
+  With those same first drafts token classification scored 76.4 on test, so
+  about 4 points of the gap is the formulation and the rest is the
+  definitions. Nobody has written span-level definitions with the same
+  care.
+- Saved probabilities now leave out options scored 0.00. A span question
+  has up to 255 options, and a run's file would otherwise be about 10 MB.
+
 ### A full read of the Jev docs
 
 All 58 pages of the Jev documentation, and the vendor's agent skill, were
@@ -622,9 +716,11 @@ word that points to the work without naming it, or the kind of work."}`
   every word of a title counts halved the missed title words but pulled
   more outside words into slots, for a net loss (row 25).
 - **The docs' patterns ask per field, and that is their weakness here.**
-  Both cookbook patterns (rows 12 and 26) ask about each slot type on its
-  own. On the test set, token classification beats them by 4 and 10 points
-  of slot F1 at about 60% of the tokens.
+  Both cookbook patterns (rows 12 and 26, now 81 and 84 in the code) ask
+  about each slot type on its own. With the same one-sentence definitions,
+  token classification beat them on test by 4 and 7 points of slot F1 at
+  about 60% of the tokens; with its current definitions it is 14 and 17
+  points ahead.
 - **A `stated` gate trades false proposals for misses** and loses overall
   (row 26).
 - **Two formulations together beat either alone** (row 27), at 2.7 times the
@@ -637,6 +733,10 @@ word that points to the work without naming it, or the kind of work."}`
 
 ## Not tried
 
+- Span-level definitions for the docs' patterns written and revised with
+  the care the per-word definitions got.
+- The intent options' slot definitions held once in the state. The intent
+  request has one question, so it would not save tokens.
 - A beam over the top two or three intents, keeping the intent whose slot
   answers are most confident (the docs' hierarchical-classification
   cookbook does this for taxonomies).

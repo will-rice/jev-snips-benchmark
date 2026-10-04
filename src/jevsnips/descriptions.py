@@ -15,15 +15,38 @@ filler differs by intent.
 """
 
 INTENT_DESCRIPTIONS = {
-    "AddToPlaylist": ("Add music to one of the user's playlists."),
-    "BookRestaurant": (
-        "Reserve a table at a restaurant or other place to eat or drink."
+    "AddToPlaylist": (
+        "Add a song, album or artist to one of the user's playlists. The request "
+        "names what to add and the playlist to add it to, usually with add or put."
     ),
-    "GetWeather": ("Ask about the weather or a forecast for a place or time."),
-    "PlayMusic": ("Play music, chosen by what it is or where it is streamed."),
-    "RateBook": ("Give a rating to a book or other written work."),
-    "SearchCreativeWork": ("Find a creative work by its title."),
-    "SearchScreeningEvent": ("Find when or where movies are showing."),
+    "BookRestaurant": (
+        "Reserve a table at a restaurant, bar or other place to eat or drink, for a"
+        " number of people, a time or a place."
+    ),
+    "GetWeather": (
+        "Ask what the weather is or will be for a place or time: the forecast, a "
+        "condition such as rain or snow, or how hot or cold it will be."
+    ),
+    "PlayMusic": (
+        "Play music chosen by artist, genre, year, ranking or streaming service, or"
+        " a song or album by a named artist. Requests like play some music, play "
+        "something by an artist, or play it on a service."
+    ),
+    "RateBook": (
+        "Give a rating, a number of stars or points, to a book, novel, essay or series."
+    ),
+    "SearchCreativeWork": (
+        "Find, show or bring up one named creative work by its title: a book, song,"
+        " album, soundtrack, tv show, movie, game or painting. Choose this when the"
+        " request gives only a title, with or without its kind, even if it says "
+        "play, listen or watch, and names no artist, streaming service, cinema or "
+        "showtime."
+    ),
+    "SearchScreeningEvent": (
+        "Find when or where movies are showing in cinemas: showtimes and movie "
+        "schedules, a film at a cinema or cinema chain, or movies playing nearby or"
+        " at a given time."
+    ),
 }
 
 SLOT_DESCRIPTIONS = {

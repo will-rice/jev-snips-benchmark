@@ -65,7 +65,9 @@ of the predicted intent or `none`. `jev.predict` makes two requests per
 utterance.
 
 1. **Intent.** One `Choice` named `intent` over the 7 intents. State is the
-   utterance text.
+   utterance text. Outside `names`, each option's description is
+   `{"what": the intent's definition, "slots": its slots' definitions}`
+   (`jev.intent_definitions`).
 2. **Slots.** One `Choice` named `token_{i}` per word over the predicted
    intent's slot types plus `none`, in one request. Instructions are an
    object with the keys `intent`, `words_before`, `word`, `words_after`, and
@@ -78,7 +80,8 @@ intent error costs the slots as well.
 
 ### Conditions
 
-`Condition` is one of four values.
+`Condition` is one of six values: four ways of running the method above,
+and two patterns from the Jev docs for comparison.
 
 - `names`: option descriptions are `None`.
 - `descriptions`: every intent and slot option carries its definition from
@@ -102,6 +105,10 @@ intent error costs the slots as well.
   in `fewshot`, with the 8 most similar pool utterances of the predicted
   intent as its examples.
 
+- `extraction` and `function_calling`: the intent request is as in
+  `descriptions`. The slot request comes from `patterns.py`; see "Docs
+  patterns" below.
+
 Example shapes:
 
 - Slot request: `{"utterance": text, "words": [{"word", "slot"}, ...]}`,
@@ -115,6 +122,34 @@ under the key `ALL_INTENTS`, with scikit-learn. Features are an utterance's
 words and adjacent word pairs. Only the first copy of a repeated text is
 indexed. `retrieve` returns the examples with the highest cosine similarity
 to the utterance, best first.
+
+### Docs patterns
+
+`patterns.py` implements the two ways of extracting values that the Jev docs
+show, so they can be scored beside token classification. Both ask about each
+slot separately, with the utterance text as state, and take the answer from
+candidates that code supplies: `candidate_spans` returns every run of
+consecutive words, shortest first, up to `MAX_OPTIONS - 1 = 254`. An
+utterance containing the word `none` raises. `spec.py` holds, for each slot
+of each intent, a one-sentence `definition` of its value, a `question`
+about the value, and a `stated` question about whether the utterance gives
+one, the shape of the function-calling cookbook's spec.
+
+- `extraction` (the value-extraction cookbook): one `Choice` per slot named
+  by the slot, options the spans plus `none` described as "None of these is
+  the requested value." Instructions: "The intent is {intent}. Which span
+  of the utterance is the {slot}? {definition} Answer none if the utterance
+  has no {slot}." A slot that
+  picks a span proposes it with the pick's probability.
+- `function_calling` (the function-calling cookbook): per slot, the same
+  options without `none` under the slot's `question` followed by its
+  `definition`, and a `Noul` named `{slot}?` with the slot's `stated`
+  question. A slot proposes its span when `stated` is at least
+  `STATED_THRESHOLD = 0.5`, scored by the lower of `stated` and the pick's
+  probability.
+
+`place_spans` places proposals from the highest score down and drops one
+that overlaps a span already placed.
 
 ### Decoding
 
@@ -140,7 +175,8 @@ Frozen pydantic models in `models.py`:
 - `Utterance`: `tokens`, `intent`, `tags`; rejects mismatched token and tag
   counts.
 - `SlotPrediction`: `tags`, `probabilities` (question name to option
-  probabilities), `input_tokens`.
+  probabilities, without the options scored 0.00; a yes/no question's is
+  `{"yes": p}`), `input_tokens`.
 - `Prediction`: the `Utterance`, `condition`, predicted `intent`,
   `intent_probabilities`, `intent_input_tokens`, `slots`, and `model` (the
   version the API returned). It rejects slot tags that do not cover every
@@ -179,7 +215,10 @@ pytest, functional style, no mocks:
 - Models: alignment and length validation, JSON round trip, the parse.
 - Data: the real test split, the schema, the example pool and fixed sample,
   and that neither contains a test utterance.
-- Questions and decoding: the intent question in both wordings, the slot
+- Docs patterns: candidate spans, both requests, both decoders, and that
+  the spec covers the schema.
+- Questions and decoding: the intent question in both wordings, the intent
+  definitions, the slot
   request's state and questions with and without examples, example payloads,
   and tag decoding including gap filling.
 - Retrieval: ranking, per-intent and cross-intent search, and distinct
