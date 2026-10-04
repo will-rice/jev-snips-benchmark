@@ -1,16 +1,22 @@
 """Ask Jev for an utterance's intent and each word's slot, and decode them."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from typesafe_sdk import Choice, JSONValue, SystemOneResponse, TypeSafeClient
 
 from jevsnips.config import MAX_GAP, MODEL, NONE, RETRIEVED_EXAMPLES
 from jevsnips.descriptions import (
     INTENT_DESCRIPTIONS,
-    NONE_DESCRIPTION,
+    NONE_DESCRIPTIONS,
     SLOT_DESCRIPTIONS,
 )
 from jevsnips.models import Condition, Prediction, SlotPrediction, Utterance
+from jevsnips.patterns import (
+    decode_extraction,
+    decode_function,
+    extraction_request,
+    function_request,
+)
 from jevsnips.retrieval import ALL_INTENTS, ExampleIndex, retrieve
 
 # Every question Jev is asked, in one place for review.
@@ -45,6 +51,10 @@ def predict(
     utterance instead, and the intent request shows the most similar
     training utterances of any intent with their intents.
 
+    Under extraction and function_calling the intent request is the one from
+    descriptions and the slots come from a pattern in the Jev docs: one
+    question per slot over the utterance's spans, not one per word.
+
     Args:
         client: An open TypeSafe client.
         utterance: The utterance to label.
@@ -60,9 +70,7 @@ def predict(
     tokens = utterance.tokens
     state = " ".join(tokens)
     described = condition != "names"
-    intents = {
-        name: INTENT_DESCRIPTIONS[name] if described else None for name in schema
-    }
+    intents = intent_definitions(schema) if described else dict.fromkeys(schema)
     retrieving = condition == "retrieved"
     intent_state: JSONValue = state
     if retrieving:
@@ -86,14 +94,30 @@ def predict(
         shown = retrieve(index, intent.choice, tokens, RETRIEVED_EXAMPLES)
     if condition == "fewshot":
         shown = examples[intent.choice]
-    slot_state, slot_questions = slot_request(
-        tokens,
-        intent.choice,
-        slots,
-        NONE_DESCRIPTION if described else None,
-        shown,
-    )
+    if condition == "extraction":
+        slot_state, slot_questions = extraction_request(tokens, intent.choice)
+    elif condition == "function_calling":
+        slot_state, slot_questions = function_request(tokens, intent.choice)
+    else:
+        slot_state, slot_questions = slot_request(
+            tokens,
+            intent.choice,
+            slots,
+            NONE_DESCRIPTIONS[intent.choice] if described else None,
+            shown,
+        )
     slot_response = client.system_one(slot_state, slot_questions, model=MODEL)
+    if condition == "extraction":
+        tags = decode_extraction(tokens, slot_response)
+    elif condition == "function_calling":
+        tags = decode_function(tokens, slot_response)
+    else:
+        tags = decode_tokens(
+            [
+                slot_response.choices[f"token_{index}"].choice
+                for index in range(len(tokens))
+            ]
+        )
     return Prediction(
         utterance=utterance,
         condition=condition,
@@ -101,15 +125,14 @@ def predict(
         intent_probabilities=intent.probabilities,
         intent_input_tokens=input_tokens(intent_response),
         slots=SlotPrediction(
-            tags=decode_tokens(
-                [
-                    slot_response.choices[f"token_{index}"].choice
-                    for index in range(len(tokens))
-                ]
-            ),
+            tags=tags,
             probabilities={
                 name: answer.probabilities
                 for name, answer in slot_response.choices.items()
+            }
+            | {
+                name: {"yes": answer.noul}
+                for name, answer in slot_response.nouls.items()
             },
             input_tokens=input_tokens(slot_response),
         ),
@@ -117,11 +140,27 @@ def predict(
     )
 
 
-def intent_question(intents: Mapping[str, str | None], keyed: bool) -> Choice:
+def intent_definitions(
+    intents: Iterable[str],
+) -> dict[str, dict[str, str | dict[str, str]]]:
+    """Define each intent by what it is and which slots it takes.
+
+    An intent's slots are what tell it apart from its neighbours, so the
+    option shows them the way the docs show a category's children.
+    """
+    return {
+        name: {"what": INTENT_DESCRIPTIONS[name], "slots": SLOT_DESCRIPTIONS[name]}
+        for name in intents
+    }
+
+
+def intent_question(
+    intents: Mapping[str, Mapping[str, str | dict[str, str]] | None], keyed: bool
+) -> Choice:
     """Build the question that picks one intent.
 
     Args:
-        intents: Each intent name with its description, or None for name only.
+        intents: Each intent name with its definition, or None for name only.
         keyed: Whether the state is an object holding the utterance under an
             `utterance` key, as it is when examples are shown beside it.
     """
