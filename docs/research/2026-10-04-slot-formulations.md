@@ -159,6 +159,42 @@ it labels `none` are mostly function words ("the" 99 of 301, "in" 33, "of"
 - Row 31's yes/no was asked 2,207 times, 148 of which should be yes. At 0.5
   it says yes to 114 of those and to 314 that should be no.
 
+### Few-shot examples
+
+Formulation 6 plus examples drawn from training utterances that are not in
+the dev set. Mean of the two halves of the dev set, where formulation 6
+scores 76.5 (75.3 and 77.7).
+
+| #   | Formulation                                       | Dev slot F1 | All slots right | Tokens |
+| --- | ------------------------------------------------- | ----------- | --------------- | ------ |
+| 32  | 3 labelled utterances of the intent in the state  | 78.0        | 51%             | 3,256  |
+| 33  | 8 labelled utterances                             | 80.8        | 56%             | 3,671  |
+| 34  | 16 labelled utterances                            | 81.6        | 57%             | 4,302  |
+| 35  | **32 labelled utterances**                        | 83.3        | 60%             | 5,564  |
+| 36  | 64 labelled utterances                            | 83.9        | 62%             | 8,184  |
+| 37  | 3 example values in each slot option's `examples` | 79.0        | 54%             | 5,101  |
+| 38  | 8 example values per slot option                  | 81.7        | 57%             | 6,992  |
+| 39  | 16 example values per slot option                 | 81.8        | 58%             | 9,621  |
+
+- **35** is the benchmark's `fewshot` condition. Test, three runs with the
+  predicted intent: 79.7 slot F1 (79.5–79.9), 54.3 frame accuracy
+  (53.9–54.9), 3.92M slot input tokens per run.
+- The test gain over descriptions is 3.3 points, about half the 6.8 on dev.
+  The two differ in the example sample (one seed each), in the dev set using
+  the gold intent, and in the dev set being drawn from the same split as the
+  examples. Only one example sample was run on test, so how much the result
+  depends on which examples are drawn is not measured.
+- A labelled utterance is `{"utterance": "play the best of abba", "slots":
+[{"slot": "album", "value": "the best of"}, {"slot": "artist", "value":
+"abba"}]}`, in a `labelled_examples` list in the state.
+- Per slot on test, few-shot against descriptions: large gains where a slot
+  takes a few fixed words (`object_part_of_series_type` 17 to 86,
+  `current_location` 62 to 100, `movie_type` 75 to 99, `music_item` 62 to
+  79); little change on titles (`album`, `track`, `entity_name`,
+  `movie_name`); a large drop on `object_location_type` (85 to 46).
+- SNIPS's training split contains 64 rows whose text equals one of 25 test
+  utterances, with the same labels. They are excluded from the examples.
+
 ### One question per slot, options are words
 
 Each slot type gets a `Choice` over the numbered words plus `none`
@@ -227,6 +263,10 @@ word that points to the work without naming it, or the kind of work."}`
   is confident that "the" or "of" inside a name is filler, so neither the
   saved probabilities nor a follow-up yes/no about the word recovers it
   (rows 29–31).
+- **Examples teach what a description cannot.** Labelled utterances in the
+  state add 3 points on test and 7 on dev, mostly on slots with a few fixed
+  values. They sit in the state once, so they cost far less than example
+  values repeated on every option (rows 35 and 38).
 - **A `Choice` over words finds a slot but not its extent.** Probability
   concentrates on one head word, so long titles are truncated (rows 18–22).
   It is the cheapest formulation by a wide margin.
@@ -259,7 +299,10 @@ word that points to the work without naming it, or the kind of work."}`
 - `what` / `not_for` rubrics on the span scheme, where sibling confusion is
   the main error. They were only tried on the token scheme.
 - `examples` in the option rubrics.
-- Example values from the training split in the descriptions (few-shot).
+- Several example samples on test, to measure how much few-shot depends on
+  which utterances are drawn, and choosing examples similar to the utterance
+  instead of at random.
+- Why `object_location_type` falls with examples.
 - Using the top-k reading for confident slots and the span question for the
   rest.
 - Treating slots with a few fixed values (`rating_unit`, `object_select`,

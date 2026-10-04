@@ -1,6 +1,7 @@
 """Tests for data loading against the real dataset."""
 
-from jevsnips.data import load_slot_schema, load_utterances
+from jevsnips.config import FEWSHOT_EXAMPLES
+from jevsnips.data import load_examples, load_slot_schema, load_utterances
 
 
 def test_test_split_parses_to_700_aligned_utterances() -> None:
@@ -26,3 +27,26 @@ def test_schema_covers_every_gold_slot_in_test() -> None:
     for utterance in load_utterances("test"):
         slots = {tag[2:] for tag in utterance.tags if tag != "O"}
         assert slots <= set(schema[utterance.intent])
+
+
+def test_examples_are_a_fixed_sample_of_training_utterances_per_intent() -> None:
+    """Each intent gets the same labelled training utterances every time."""
+    examples = load_examples()
+    assert set(examples) == set(load_slot_schema())
+    assert all(len(utterances) == FEWSHOT_EXAMPLES for utterances in examples.values())
+    assert all(
+        utterance.intent == intent
+        for intent, utterances in examples.items()
+        for utterance in utterances
+    )
+    assert examples == load_examples()
+
+
+def test_examples_do_not_include_any_test_utterance() -> None:
+    """Few-shot examples must not leak the evaluated utterances."""
+    test_texts = {utterance.tokens for utterance in load_utterances("test")}
+    assert not any(
+        utterance.tokens in test_texts
+        for utterances in load_examples().values()
+        for utterance in utterances
+    )

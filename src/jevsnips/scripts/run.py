@@ -10,7 +10,7 @@ from tqdm.contrib.concurrent import thread_map
 from typesafe_sdk import TypeSafeClient
 
 from jevsnips.config import MAX_WORKERS, RESULTS_DIR, RUNS, SPLIT
-from jevsnips.data import load_slot_schema, load_utterances
+from jevsnips.data import load_examples, load_slot_schema, load_utterances
 from jevsnips.jev import predict
 from jevsnips.metrics import evaluate, summarize
 from jevsnips.models import Condition
@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument(
         "condition",
         choices=get_args(Condition),
-        help="Offer labels by name only, or with descriptions.",
+        help="Offer labels by name only, with descriptions, or with examples too.",
     )
     parser.add_argument(
         "--limit", type=int, help="Evaluate only the first N utterances."
@@ -37,13 +37,16 @@ def main() -> None:
     load_dotenv()
 
     schema = load_slot_schema()
+    examples = load_examples()
     utterances = load_utterances(SPLIT)[: args.limit]
     RESULTS_DIR.mkdir(exist_ok=True)
     runs = []
     with TypeSafeClient() as client:
         for path in paths:
             predictions = thread_map(
-                lambda utterance: predict(client, utterance, schema, args.condition),
+                lambda utterance: predict(
+                    client, utterance, schema, examples, args.condition
+                ),
                 utterances,
                 max_workers=MAX_WORKERS,
             )

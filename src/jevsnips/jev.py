@@ -2,7 +2,8 @@
 
 from collections.abc import Mapping, Sequence
 
-from typesafe_sdk import Choice, SystemOneResponse, TypeSafeClient
+from seqeval.metrics.sequence_labeling import get_entities
+from typesafe_sdk import Choice, JSONValue, SystemOneResponse, TypeSafeClient
 
 from jevsnips.config import MAX_GAP, MODEL, NONE
 from jevsnips.descriptions import (
@@ -17,19 +18,22 @@ def predict(
     client: TypeSafeClient,
     utterance: Utterance,
     schema: Mapping[str, Sequence[str]],
+    examples: Mapping[str, Sequence[Utterance]],
     condition: Condition,
 ) -> Prediction:
     """Predict the intent, then classify each word into one of its slots.
 
     Slots are conditioned on the predicted intent, never the gold one. Under
-    the descriptions condition every intent and slot is offered with its
-    definition; under names the model sees label names only.
+    names the model sees label names only. Under descriptions every intent
+    and slot is offered with its definition. Under fewshot the slot request
+    also shows labelled training utterances of the predicted intent.
 
     Args:
         client: An open TypeSafe client.
         utterance: The utterance to label.
         schema: Each intent's slot types.
-        condition: Whether labels are offered with descriptions.
+        examples: Each intent's labelled training utterances.
+        condition: What the model is shown besides label names.
 
     Returns:
         The predicted intent and the slot tags, probabilities, and token
@@ -37,7 +41,7 @@ def predict(
     """
     tokens = utterance.tokens
     state = " ".join(tokens)
-    described = condition == "descriptions"
+    described = condition != "names"
     intents = {
         name: INTENT_DESCRIPTIONS[name] if described else None for name in schema
     }
@@ -50,8 +54,11 @@ def predict(
         for slot in schema[intent.choice]
     }
 
+    slot_state: dict[str, JSONValue] = {"utterance": state}
+    if condition == "fewshot":
+        slot_state["labelled_examples"] = labelled_examples(examples[intent.choice])
     slot_response = client.system_one(
-        {"utterance": state},
+        slot_state,
         token_questions(
             tokens, intent.choice, slots, NONE_DESCRIPTION if described else None
         ),
@@ -126,6 +133,24 @@ def token_questions(
         )
         for index, token in enumerate(tokens)
     }
+
+
+def labelled_examples(utterances: Sequence[Utterance]) -> list[JSONValue]:
+    """Show each utterance with its slots as whole values.
+
+    Whole values show where a slot starts and stops, including the small
+    words inside names and titles that a word judged alone looks like filler.
+    """
+    return [
+        {
+            "utterance": " ".join(utterance.tokens),
+            "slots": [
+                {"slot": slot, "value": " ".join(utterance.tokens[start : end + 1])}
+                for slot, start, end in get_entities(list(utterance.tags))
+            ],
+        }
+        for utterance in utterances
+    ]
 
 
 def decode_tokens(choices: Sequence[str]) -> tuple[str, ...]:

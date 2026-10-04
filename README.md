@@ -7,7 +7,8 @@ benchmark: intent detection and slot filling.
 Jev does not generate text. It takes some state and a set of typed questions
 and returns typed answers with probabilities. This project asks how far that
 gets on a task normally solved by a trained tagger, without showing the model
-a single labelled example, and how much one-sentence label descriptions help.
+a single labelled example, how much one-sentence label descriptions help,
+and how much a handful of labelled examples adds.
 
 ## Results
 
@@ -18,6 +19,10 @@ condition, with the range across runs in brackets.
 | ------------ | ---------------- | ---------------- | ---------------- |
 | Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
 | Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
+| Few-shot     | 95.0 (94.9–95.0) | 79.7 (79.5–79.9) | 54.3 (53.9–54.9) |
+
+Names and descriptions are zero-shot. Few-shot adds 32 labelled training
+utterances per intent to the descriptions condition.
 
 What the numbers say:
 
@@ -27,6 +32,13 @@ What the numbers say:
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
   in the slots, not the intent: on utterances where both conditions got the
   intent right, slot F1 goes from 61.5 to 78.7.
+- **A few labelled examples add another 3 points.** Showing 32 training
+  utterances of the predicted intent lifts slot F1 from 76.4 to 79.7 and
+  frame accuracy from 49.9 to 54.3, for 1.9 times the slot tokens. The gain
+  is uneven: slots with a few fixed values jump (`object_part_of_series_type`
+  17 to 86, `current_location` 62 to 100, `movie_type` 75 to 99), titles
+  barely move (`track` 41 to 42, `album` 27 to 29), and one slot falls
+  (`object_location_type` 85 to 46).
 - **Token classification beats the extraction patterns in the Jev docs** by
   4 to 10 points of slot F1, at about 60% of the tokens. See the next table.
 - **How the question is posed matters as much as what is asked.** On a
@@ -36,9 +48,9 @@ What the numbers say:
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
 - **It is still well short of a trained tagger** (roughly 96–97% slot F1).
-  With descriptions, the weakest slots are titles and names that only
-  context can tell apart: `object_part_of_series_type` (17), `album` (27),
-  `track` (41), `entity_name` (42), `playlist` (51).
+  The weakest slots in every condition are titles and names that only
+  context can tell apart: with few-shot, `album` (29), `entity_name` (41),
+  `track` (42), `movie_name` (50), `object_name` (56).
 
 Jev's slot answers are not identical between runs, which is why each
 condition is run three times. The ranges above are under one point.
@@ -49,6 +61,7 @@ Input tokens per run, mean of three runs:
 | ------------ | ------- | --------- |
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
+| Few-shot     | 336,703 | 3,917,498 |
 
 ### Against the approaches the Jev docs recommend
 
@@ -110,9 +123,19 @@ utterance is sent to the model.
   a kind of book under `RateBook` and a showtime listing under
   `SearchScreeningEvent`).
 
-Both conditions are zero-shot. The descriptions were written from the label
-names and the training split only, before any description run on the test
-set, and they contain no example values.
+- **Few-shot.** Descriptions, plus 32 labelled training utterances of the
+  predicted intent in the slot request's state, each shown as its text and
+  its slots as whole values (`{"slot": "album", "value": "the best of"}`).
+  The 224 examples (1.7% of the training split) are sampled once with a
+  fixed seed. The intent question is unchanged.
+
+Names and descriptions are zero-shot. The descriptions were written from the
+label names and the training split only, before any description run on the
+test set, and they contain no example values.
+
+SNIPS repeats some test utterances in its training split: 64 training rows
+have the same text as one of 25 test utterances. Those rows are never used
+as few-shot examples. Supervised results on SNIPS include them in training.
 
 ### Metrics
 
@@ -149,6 +172,15 @@ per utterance.
 | Word and context as labelled fields, `none` described (**the benchmark**) | **76.4**    | 3,013  |
 | The benchmark with `what` / `not_for` option rubrics for sibling slots    | 77.1 †      | 4,354  |
 | The same, plus "every word of a title counts" and a rubric for `none`     | 75.8 †      | 5,128  |
+| **The benchmark plus examples from the training split**                   |             |        |
+| 3 labelled utterances of the intent in the state                          | 78.0 ‡      | 3,256  |
+| 8 labelled utterances                                                     | 80.8 ‡      | 3,671  |
+| 16 labelled utterances                                                    | 81.6 ‡      | 4,302  |
+| 32 labelled utterances (**the few-shot condition**)                       | 83.3 ‡      | 5,564  |
+| 64 labelled utterances                                                    | 83.9 ‡      | 8,184  |
+| 3 example values on each slot option                                      | 79.0 ‡      | 5,101  |
+| 8 example values on each slot option                                      | 81.7 ‡      | 6,992  |
+| 16 example values on each slot option                                     | 81.8 ‡      | 9,621  |
 | **Per word, left to right**                                               |             |        |
 | Whole utterance, word bracketed, earlier labels shown                     | 34.9        | 4,874  |
 | Only the words so far, last word bracketed, earlier labels shown          | 45.3        | 4,756  |
@@ -169,6 +201,9 @@ per utterance.
 † Scored on the second half of the dev set, where the benchmark formulation
 scores 77.8.
 
+‡ Mean of the two halves of the dev set, where the benchmark formulation
+scores 76.5.
+
 What we learned:
 
 - Each word has exactly one class, and asking for it directly is the best
@@ -184,6 +219,10 @@ What we learned:
   but misses 12% of the slots that are there, for a net loss.
 - Borrowing the span question's boundaries adds two points on the dev set,
   for 2.7 times the tokens. It is not in the benchmark.
+- Labelled examples help, and whole utterances in the state are the cheap
+  way to give them: example values on every option cost about twice the
+  tokens for the same gain. The dev set overstated the gain (6.8 points
+  there, 3.3 on test).
 - The remaining errors are mostly small words inside names ("the", "of")
   labelled `none`. Jev is confident about them, so neither the saved
   probabilities nor a follow-up yes/no about the word repairs them.
@@ -210,6 +249,10 @@ uv run run names
 
 ```bash
 uv run run descriptions
+```
+
+```bash
+uv run run fewshot
 ```
 
 Compare the saved runs, overall and per slot type:
@@ -269,7 +312,7 @@ predictions = [Prediction.model_validate_json(line) for line in lines]
 src/jevsnips/
 ├── config.py        # Constants: dataset, model, limits
 ├── models.py        # Utterance, SlotPrediction, Prediction, Parse
-├── data.py          # Load utterances and the per-intent slot schema
+├── data.py          # Load utterances, the slot schema, few-shot examples
 ├── descriptions.py  # One-sentence definitions of intents and slots
 ├── jev.py           # Build questions, call Jev, decode answers
 ├── metrics.py       # Intent accuracy, slot F1, frame accuracy

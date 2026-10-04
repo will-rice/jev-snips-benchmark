@@ -7,8 +7,10 @@ from jevsnips.jev import (
     decode_tokens,
     input_tokens,
     intent_question,
+    labelled_examples,
     token_questions,
 )
+from jevsnips.models import Utterance
 
 
 def test_intent_question_offers_each_intent_without_descriptions() -> None:
@@ -116,3 +118,21 @@ def test_decode_tokens_chains_fills_across_several_gaps() -> None:
         "I-track",
         "O",
     )
+
+
+def test_labelled_examples_show_each_utterance_with_its_slot_values() -> None:
+    """An example pairs the utterance text with its slots as whole values."""
+    example = Utterance(
+        tokens=("play", "the", "best", "of", "abba"),
+        intent="PlayMusic",
+        tags=("O", "B-album", "I-album", "I-album", "B-artist"),
+    )
+    assert labelled_examples([example]) == [
+        {
+            "utterance": "play the best of abba",
+            "slots": [
+                {"slot": "album", "value": "the best of"},
+                {"slot": "artist", "value": "abba"},
+            ],
+        }
+    ]

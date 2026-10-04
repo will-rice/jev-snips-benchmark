@@ -224,6 +224,14 @@ describe a span scheme, a 255-option cap, or per-scheme metrics are
 superseded. The span scheme's results and the other formulations tried are
 recorded in `docs/research/2026-10-04-slot-formulations.md`.
 
+## Few-shot condition
+
+A third condition, `fewshot`, is the descriptions condition plus
+`FEWSHOT_EXAMPLES = 32` labelled training utterances of the predicted intent
+in the slot request's state. Examples are sampled once per intent with
+`FEWSHOT_SEED`, from aligned training rows whose text does not appear in the
+evaluated split. The intent question is unchanged.
+
 ## Snips-style parse
 
 Each `Prediction` has a computed `parse`: the predicted intent with its
