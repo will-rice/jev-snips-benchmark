@@ -16,17 +16,18 @@ SNIPS test set, 700 utterances, model `jev-1.13.0`, zero-shot.
 | Metric                  | Token scheme | Span scheme |
 | ----------------------- | ------------ | ----------- |
 | Intent accuracy         | 94.3%        | 94.3%       |
-| Slot F1                 | 26.0%        | 49.1%       |
-| Semantic-frame accuracy | 0.9%         | 20.6%       |
+| Slot F1                 | 25.5%        | 48.9%       |
+| Semantic-frame accuracy | 0.9%         | 19.3%       |
 | Input tokens            | 926,053      | 3,614,597   |
 
 Intent accuracy is shared: both schemes use the same predicted intent, which
 took a further 252,703 input tokens.
 
-Jev's slot answers are not identical between runs. A second full run gave the
-same intent accuracy and token counts, but 25.5% and 48.9% slot F1 and 0.9%
-and 19.3% frame accuracy for the token and span schemes. Treat differences
-below about one point as noise.
+These numbers are from the run saved in `results/test.jsonl`. Jev's slot
+answers are not identical between runs: an earlier full run gave the same
+intent accuracy and token counts, but 26.0% and 49.1% slot F1 and 0.9% and
+20.6% frame accuracy for the token and span schemes. Treat differences below
+about one point as noise.
 
 Supervised models trained on the 13,084 SNIPS training utterances reach
 roughly 98–99% intent accuracy and 96–97% slot F1; nothing here is trained.
@@ -111,7 +112,7 @@ Metrics are logged to the console. A limited run writes to `results/test-first20
 
 ## Output
 
-`results/test.jsonl` holds one record per utterance: the tokens and gold
+`results/test.jsonl` is committed and holds one record per utterance: the tokens and gold
 labels, the predicted intent and its probabilities, and for each scheme the
 predicted tags, the probabilities of every question's options, and the input
 tokens used. Records are `jevsnips.models.Prediction` objects:

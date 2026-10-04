@@ -170,7 +170,7 @@ totals per scheme, and the returned model version are logged with
 
 One optional argument, `--limit N`, evaluates the first N rows for a cheap
 smoke run and writes to `results/{split}-first{N}.jsonl` so it cannot
-overwrite a full run. A non-positive limit raises before any request. `results/` is git-ignored.
+overwrite a full run. A non-positive limit raises before any request. Full-run results are committed; smoke-run files are git-ignored.
 
 ### Errors
 

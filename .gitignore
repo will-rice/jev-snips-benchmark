@@ -227,8 +227,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Benchmark outputs
-results/
+# Smoke-run outputs (full-run results are committed)
+results/*-first*.jsonl
 
 # Plan execution scratch
 .superpowers/
