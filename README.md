@@ -20,21 +20,21 @@ condition, with the range across runs in brackets.
 | Names        | 94.3 (94.3–94.3) | 59.7 (59.5–59.9) | 30.1 (29.9–30.3) |
 | Descriptions | 95.1 (94.9–95.3) | 76.4 (76.3–76.5) | 49.9 (49.7–50.0) |
 | Few-shot     | 95.0 (94.9–95.0) | 83.5 (83.4–83.6) | 61.9 (61.6–62.3) |
-| Retrieved    | 95.1 (95.0–95.3) | 86.2 (85.9–86.5) | 68.2 (67.9–68.6) |
+| Retrieved    | 96.1 (96.1–96.1) | 86.9 (86.7–87.2) | 69.5 (69.0–70.4) |
 
 Names and descriptions are zero-shot. Few-shot adds a fixed 32 labelled
 training utterances per intent to the descriptions condition. Retrieved
 instead adds the 8 training utterances most similar to each utterance, drawn
-from the whole training split.
+from the whole training split, to both the intent and the slot request.
 
 What the numbers say:
 
 - **Intent detection needs almost nothing.** Names alone give 94.3%, and
   descriptions add under a point. Supervised models trained on the 13,084
-  SNIPS training utterances reach roughly 98–99%.
+  SNIPS training utterances reach 98.6% (Joint BERT, below).
 - **One-sentence descriptions are worth 17 points of slot F1.** The gain is
   in the slots, not the intent: on utterances where every condition got the
-  intent right, slot F1 goes from 61.5 to 78.7.
+  intent right, slot F1 goes from 61.8 to 79.0.
 - **A few labelled examples add another 7 points.** Showing 32 training
   utterances of the predicted intent, with every word labelled, lifts slot
   F1 from 76.4 to 83.5 and frame accuracy from 49.9 to 61.9, for 3.1 times
@@ -43,14 +43,21 @@ What the numbers say:
   `movie_type` 75 to 100, `playlist` 51 to 76). Titles barely move (`track`
   41 to 43, `album` 26 to 30, `movie_name` 51 to 50).
 - **Choosing examples by similarity beats a fixed sample, for half the
-  tokens.** Showing the 8 training utterances most like the one being
-  labelled scores 86.2 slot F1 against 83.5 for 32 fixed ones, and gets 68%
-  of utterances entirely right against 62%. It draws on all 12,833 distinct
+  tokens.** With the intent question unchanged, showing the slot request
+  the 8 training utterances most like the one being labelled scored 86.2
+  slot F1 against 83.5 for 32 fixed ones, and got 68% of utterances entirely
+  right against 62%. (The retrieved row above is higher, 86.9 and 69.5,
+  because it also retrieves examples for the intent.) It draws on all 12,833 distinct
   training utterances, though, where few-shot uses 224. SNIPS utterances
   are templated, so 12% of test utterances retrieve an example that differs
   from them by one word. Jev is still doing more than looking labels up:
   copying each word's label from the same 8 examples scores 72 on the dev
   set, where Jev with them scores 89.5.
+- **Retrieved examples help the intent too.** Showing the intent question
+  the 8 most similar training utterances of any intent, with their intents,
+  cuts intent errors from about 34 to 27 of 700 (95.1 to 96.1). Most of what
+  remains is three intents that overlap in meaning: `SearchCreativeWork`,
+  `SearchScreeningEvent`, and `PlayMusic`.
 - **Examples must have the shape of the question.** The same 32 utterances
   shown as whole slot values ("album: the best of") scored 79.7: Jev left
   the first word of a phrase out of its slot more often ("movie" in "movie
@@ -63,13 +70,21 @@ What the numbers say:
   description, 60 once `none` was described, 68 with short gaps filled, and
   76 once the word and its context were given as labelled fields. See
   [What we tried](#what-we-tried).
-- **It is still well short of a trained tagger** (roughly 96–97% slot F1).
+- **It is still well short of a trained tagger** (97.0 slot F1, below).
   In every condition with examples, the weakest slots are titles and names
-  that only context can tell apart. With retrieved examples: `album` (36),
-  `entity_name` (49), `movie_name` (50), `track` (53), `object_name` (59).
+  that only context can tell apart. With retrieved examples: `album` (39),
+  `entity_name` (50), `movie_name` (54), `object_name` (61), `track` (64).
 
 Jev's slot answers are not identical between runs, which is why each
-condition is run three times. The ranges above are under one point.
+condition is run three times. The ranges above are at most a point and a
+half.
+
+For reference, a supervised model fine-tuned on the full training split,
+[Joint BERT](https://arxiv.org/abs/1902.10909) (Chen et al., 2019), reports
+98.6 intent accuracy, 97.0 slot F1, and 92.8 frame accuracy on this test
+set. The gap is the cost of not training: that model has learned SNIPS's
+phrasing, slot vocabulary, and annotation conventions from 13,084 labelled
+utterances, 64 of which repeat a test utterance.
 
 Input tokens per run, mean of three runs:
 
@@ -78,7 +93,7 @@ Input tokens per run, mean of three runs:
 | Names        | 252,703 | 1,122,639 |
 | Descriptions | 336,703 | 2,113,624 |
 | Few-shot     | 336,703 | 6,608,202 |
-| Retrieved    | 336,703 | 3,139,692 |
+| Retrieved    | 524,801 | 3,144,857 |
 
 ### Against the approaches the Jev docs recommend
 
@@ -113,7 +128,8 @@ the wording is in the research note linked below.
 Slot filling is posed as token classification: every word gets exactly one
 class, a slot type or `none`. Each utterance takes two requests.
 
-1. **Intent.** One `Choice` over the 7 intents, with the utterance as state.
+1. **Intent.** One `Choice` over the 7 intents, with the utterance as state
+   (and, in the retrieved condition, examples beside it).
 2. **Slots.** One `Choice` per word over the predicted intent's slot types
    plus `none`, all in one request. The instructions are labelled fields,
    not a sentence: the intent, the word, the words before it, the words
@@ -148,9 +164,11 @@ and descriptions no training utterance is sent to the model.
   The 224 examples (1.7% of the training split) are sampled once with a
   fixed seed. The intent question is unchanged.
 
-- **Retrieved.** As few-shot, but the examples are chosen per utterance: the
-  8 training utterances of the predicted intent most similar to it, by
-  TF-IDF cosine over words and adjacent word pairs. The pool is every usable
+- **Retrieved.** As few-shot, but the examples are chosen per utterance by
+  TF-IDF cosine over words and adjacent word pairs. The intent request shows
+  the 8 most similar training utterances of any intent, each with its
+  intent. The slot request shows the 8 most similar of the predicted intent,
+  each with every word labelled. The pool is every usable
   training utterance, with repeated texts counted once (12,833), so this
   condition uses the whole training
   split as a lookup table, without training on it.
@@ -216,6 +234,7 @@ per utterance.
 | 8 most similar utterances (**the retrieved condition**)                   | 89.5 ‡      | 4,474  |
 | 16 most similar utterances                                                | 89.4 ‡      | 5,981  |
 | 32 most similar utterances                                                | 89.6 ‡      | 9,048  |
+| 8 most similar utterances by embedding similarity (two models tried)      | 88.3–88.5 ‡ | 4,520  |
 | 8 most similar utterances, no descriptions                                | 89.0 ‡      | 3,059  |
 | 32 fixed utterances with every word labelled, no descriptions             | 84.7 ‡      | 7,834  |
 | Copy each word's label from the 8 most similar utterances, without Jev    | 72.0        | 0      |
@@ -262,6 +281,10 @@ What we learned:
   cost about twice the tokens for the same gain. Labelling every word costs
   more again (about as much as 16 example values per option) and is the
   most accurate.
+- Similarity by shared words and word pairs is as good as embedding
+  similarity here, and needs no model. Retrieval for the slot request is
+  already limited to one intent, so what matters is the wording around the
+  slot. Embeddings were not tried for the intent request.
 - Which examples matters more than how many. Eight chosen by similarity
   beat 64 chosen at random, and more than eight adds nothing.
 - With examples, descriptions add about half a point; without examples they

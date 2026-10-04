@@ -256,9 +256,11 @@ dev halves.
 | 50  | 32 fixed utterances, no descriptions                                          | 84.7        | 63%             | 7,834  |
 | 51  | No Jev: copy each word's most common label from the 8 most similar utterances | 72.0        | 29%             | 0      |
 
-- **46** is the benchmark's `retrieved` condition. Test, three runs with the
-  predicted intent: 86.2 slot F1 (85.9–86.5), 68.2 frame accuracy
-  (67.9–68.6), 3.14M slot input tokens per run. The pool on test is the
+- **46** is the slot half of the benchmark's `retrieved` condition. Test,
+  three runs with the intent predicted from descriptions alone: 86.2 slot F1
+  (85.9–86.5), 68.2 frame accuracy (67.9–68.6), 3.14M slot input tokens per
+  run. With retrieved examples for the intent as well (row 57), it is 86.9
+  and 69.5. The pool on test is the
   12,833 distinct aligned training utterances whose text is not a test
   utterance.
 - The test gain over fixed few-shot is 2.7 points; the dev set predicted
@@ -283,6 +285,64 @@ dev halves.
   8 most similar" should mean. One repeated text has copies with different
   labels; the first copy's labels are the ones shown. The dev-set rows above
   were measured before this change.
+
+### Retrieved examples for the intent
+
+Every change above was to the slot request. The intent request was the
+zero-shot one in all conditions. This shows it examples too: the `k`
+training utterances most similar to the utterance, from all intents, each as
+`{"utterance", "intent"}`, in a `labelled_examples` list beside the
+utterance. Intent descriptions are kept. Dev set, 700 utterances.
+
+| #   | Intent question                                      | Dev intent accuracy | Wrong | Tokens |
+| --- | ---------------------------------------------------- | ------------------- | ----- | ------ |
+| 55  | Descriptions only (all conditions until now)         | 96.1                | 27    | 481    |
+| 56  | Descriptions and the 4 most similar utterances       | 98.7                | 9     | 623    |
+| 57  | **Descriptions and the 8 most similar utterances**   | 98.7                | 9     | 750    |
+| 58  | Descriptions and the 16 most similar utterances      | 98.7                | 9     | 1,006  |
+| 59  | No Jev: the most common intent of the 8 most similar | 93.7                | 44    | 0      |
+
+- **57** is now part of the benchmark's `retrieved` condition. Test, three
+  runs: intent accuracy 96.1 (27 wrong of 700, identical in all three runs)
+  against 95.1 without examples; slot F1 86.9 (86.7–87.2) against 86.2;
+  frame accuracy 69.5 (69.0–70.4) against 68.2. Intent input tokens rise
+  from 336,703 to 524,801 per run.
+- The dev set overstated the gain again: 2.6 points there, 1.0 on test.
+- Of the 27 intent errors left on test, 26 are among three intents that
+  overlap in meaning: `SearchScreeningEvent` read as `SearchCreativeWork`
+  (10), `SearchCreativeWork` read as `PlayMusic` (8) or as
+  `SearchScreeningEvent` (6), and `PlayMusic` read as `SearchCreativeWork`
+  (2).
+- How much the examples give away, on test: 88% of the retrieved examples
+  carry the utterance's gold intent, and for 66% of utterances all 8 share
+  one intent (the gold one in all but 3 cases). A majority vote among the 8
+  is right for 93.6% of utterances. Where the majority was wrong (45
+  utterances), Jev was still right in 26. No retrieved example is a test
+  utterance; 12% of utterances retrieve one that differs by a single word.
+- Jev with examples beats both Jev alone and a vote among the examples (row
+  59), so it is weighing them, not copying.
+
+### How similarity is measured
+
+Formulation 46 with a different similarity for choosing the 8 examples.
+Embeddings are of the utterance text, L2-normalised, compared by cosine.
+The hybrid adds the embedding cosine to the TF-IDF cosine. The pool is
+deduplicated. Both dev halves are shown, since the differences are small.
+
+| #   | Similarity                                           | Dev slot F1, half A / B | All slots right, A / B |
+| --- | ---------------------------------------------------- | ----------------------- | ---------------------- |
+| 46  | **TF-IDF over words and word pairs** (the benchmark) | 88.6 / 90.3             | 72% / 77%              |
+| 52  | Embedding, `sentence-transformers/all-MiniLM-L6-v2`  | 87.7 / 88.8             | 70% / 73%              |
+| 53  | Embedding, `BAAI/bge-base-en-v1.5`                   | 88.4 / 88.5             | 72% / 73%              |
+| 54  | Hybrid of 46 and 52                                  | 87.7 / 90.3             | 70% / 77%              |
+
+- Embedding similarity is about a point below TF-IDF, which is close to the
+  noise on this dev set. It is not better, and it would add a model download
+  and a PyTorch dependency, so it was not adopted or run on test.
+- Retrieval for the slot request is already restricted to one intent, so
+  candidates share a topic. Embeddings were not tried for the intent
+  request, which retrieves across intents. What makes an example useful is the wording around the slot, which
+  word-pair overlap matches directly.
 
 ### One question per slot, options are words
 
@@ -400,7 +460,6 @@ word that points to the work without naming it, or the kind of work."}`
   depends on which utterances are drawn.
 - Retrieval with a smaller pool (for example 50 or 200 examples per intent),
   to see how much of the gain needs the whole training split.
-- Retrieval by embedding similarity instead of TF-IDF.
 - `names` and `fewshot`/`retrieved` without descriptions on test, for a
   full two-by-two of descriptions and examples.
 - Using the top-k reading for confident slots and the span question for the
